@@ -17,6 +17,10 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
                 .WithOne(oj => oj.ParticipacionJornada)
                 .HasForeignKey(oj => oj.ParticipacionJornadaId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Restricción 4: Una sola participación por jornada y persona
+            builder.HasIndex(pj => new { pj.JornadaId, pj.PersonaId })
+                .IsUnique();
         }
     }
 }

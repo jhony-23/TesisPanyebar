@@ -17,6 +17,10 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
                 .WithOne(rp => rp.Permiso)
                 .HasForeignKey(rp => rp.PermisoId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Restricción 11: Codigo único
+            builder.HasIndex(p => p.Codigo)
+                .IsUnique();
         }
     }
 }

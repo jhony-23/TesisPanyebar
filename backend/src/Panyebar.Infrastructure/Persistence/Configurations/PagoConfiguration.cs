@@ -20,6 +20,10 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
 
             // Relación 13: UsuarioAdministrativo → Pago (unidireccional, 1 : N)
             // Se configura desde UsuarioAdministrativoConfiguration
+
+            // Precisión monetaria
+            builder.Property(p => p.Monto)
+                .HasPrecision(18, 2);
         }
     }
 }

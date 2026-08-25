@@ -24,6 +24,10 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
                 .WithOne(ap => ap.Obligacion)
                 .HasForeignKey(ap => ap.ObligacionId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Precisión monetaria
+            builder.Property(o => o.Monto)
+                .HasPrecision(18, 2);
         }
     }
 }

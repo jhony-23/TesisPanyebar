@@ -17,6 +17,10 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
                 .WithOne(o => o.Cuota)
                 .HasForeignKey(o => o.CuotaId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Precisión monetaria
+            builder.Property(c => c.Monto)
+                .HasPrecision(18, 2);
         }
     }
 }

@@ -24,6 +24,17 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
                 .WithOne(o => o.Suministro)
                 .HasForeignKey(o => o.SuministroId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Restricción 1: NIS con longitud máxima y unicidad
+            builder.Property(s => s.Nis)
+                .HasMaxLength(10);
+
+            builder.HasIndex(s => s.Nis)
+                .IsUnique();
+
+            // Restricción 2: CodigoQrToken con unicidad
+            builder.HasIndex(s => s.CodigoQrToken)
+                .IsUnique();
         }
     }
 }

@@ -38,6 +38,10 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
                 .WithOne(a => a.UsuarioAdministrativo)
                 .HasForeignKey(a => a.UsuarioAdministrativoId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Restricción 10: NombreUsuario único
+            builder.HasIndex(ua => ua.NombreUsuario)
+                .IsUnique();
         }
     }
 }
