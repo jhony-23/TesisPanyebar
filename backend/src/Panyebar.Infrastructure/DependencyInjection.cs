@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Panyebar.Application.Security;
 using Panyebar.Infrastructure.Persistence;
 using Panyebar.Infrastructure.Security;
@@ -27,6 +28,9 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHashService, PasswordHasherAdapter>();
         services.AddScoped<IUsuarioAdministrativoAuthenticationRepository, UsuarioAdministrativoAuthenticationRepository>();
         services.AddScoped<IUsuarioAdministrativoAuthenticationService, UsuarioAdministrativoAuthenticationService>();
+
+        services.Configure<JwtTokenOptions>(configuration.GetSection(JwtTokenOptions.SectionName));
+        services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 
         return services;
     }
