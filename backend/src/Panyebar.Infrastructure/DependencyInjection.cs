@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Panyebar.Application.Security;
 using Panyebar.Infrastructure.Persistence;
+using Panyebar.Infrastructure.Security;
 
 namespace Panyebar.Infrastructure;
 
@@ -21,6 +23,10 @@ public static class DependencyInjection
 
         services.AddDbContext<PanyebarDbContext>(options =>
             options.UseSqlServer(connectionString));
+
+        services.AddScoped<IPasswordHashService, PasswordHasherAdapter>();
+        services.AddScoped<IUsuarioAdministrativoAuthenticationRepository, UsuarioAdministrativoAuthenticationRepository>();
+        services.AddScoped<IUsuarioAdministrativoAuthenticationService, UsuarioAdministrativoAuthenticationService>();
 
         return services;
     }
