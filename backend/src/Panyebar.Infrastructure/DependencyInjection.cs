@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<IUsuarioAdministrativoAuthenticationRepository, UsuarioAdministrativoAuthenticationRepository>();
         services.AddScoped<IUsuarioAdministrativoAuthenticationService, UsuarioAdministrativoAuthenticationService>();
         services.AddScoped<IUsuarioPermissionRepository, UsuarioPermissionRepository>();
+        services.AddScoped<IAdministrativeAccessService, AdministrativeAccessService>();
 
         services.Configure<JwtTokenOptions>(configuration.GetSection(JwtTokenOptions.SectionName));
         services.AddScoped<IAccessTokenService, JwtAccessTokenService>();

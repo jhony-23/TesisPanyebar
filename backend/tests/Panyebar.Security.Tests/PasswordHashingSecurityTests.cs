@@ -1,11 +1,13 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Panyebar.Application.Security;
 using Panyebar.Domain.Entities;
 using Panyebar.Domain.Enums;
+using Panyebar.Infrastructure.Persistence;
 using Panyebar.Infrastructure.Security;
 
 namespace Panyebar.Security.Tests;
@@ -193,6 +195,155 @@ public class PasswordHashingSecurityTests
         var result = await service.AuthenticateAsync("admin", "PasswordErronea");
 
         Assert.False(result.IsAuthenticated);
+    }
+
+    [Fact]
+    public async Task CreateUsuarioAsync_CreatesUser_StoresHashedPassword_AndDoesNotExposeHash()
+    {
+        var options = new DbContextOptionsBuilder<PanyebarDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var dbContext = new PanyebarDbContext(options);
+        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+
+        var createdUser = await service.CreateUsuarioAsync("nuevo.admin", "Password123!", CancellationToken.None);
+
+        Assert.NotNull(createdUser);
+        Assert.Equal("nuevo.admin", createdUser!.NombreUsuario);
+
+        var persistedUser = await dbContext.UsuariosAdministrativos.SingleAsync();
+        Assert.NotEqual("Password123!", persistedUser.PasswordHash);
+        Assert.True(new PasswordHasherAdapter().Verify(persistedUser.PasswordHash, "Password123!"));
+        Assert.Equal("nuevo.admin", createdUser.NombreUsuario);
+        Assert.Null(typeof(UsuarioAdministrativoAuthenticationResult).GetProperty("PasswordHash"));
+    }
+
+    [Fact]
+    public async Task CreateUsuarioAsync_RejectsDuplicateNombreUsuario()
+    {
+        var options = new DbContextOptionsBuilder<PanyebarDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var dbContext = new PanyebarDbContext(options);
+        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+
+        var first = await service.CreateUsuarioAsync("duplicado", "Password123!", CancellationToken.None);
+        var second = await service.CreateUsuarioAsync("duplicado", "OtraPassword123!", CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.Null(second);
+        Assert.Equal(1, await dbContext.UsuariosAdministrativos.CountAsync());
+    }
+
+    [Fact]
+    public async Task SetRolesForUsuarioAsync_SynchronizesFinalRoleList_WithoutDuplicating()
+    {
+        var options = new DbContextOptionsBuilder<PanyebarDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var dbContext = new PanyebarDbContext(options);
+
+        dbContext.Roles.AddRange(
+            new Rol { Id = 1, Nombre = "Admin", Estado = EstadoRegistro.Activo },
+            new Rol { Id = 2, Nombre = "Auditor", Estado = EstadoRegistro.Activo },
+            new Rol { Id = 3, Nombre = "Operador", Estado = EstadoRegistro.Activo });
+
+        var user = new UsuarioAdministrativo { Id = 10, NombreUsuario = "admin.sync", PasswordHash = _passwordHashService.Hash("Password123!"), Estado = EstadoRegistro.Activo };
+        dbContext.UsuariosAdministrativos.Add(user);
+        dbContext.UsuarioRoles.Add(new UsuarioRol { UsuarioAdministrativoId = user.Id, RolId = 1 });
+        dbContext.UsuarioRoles.Add(new UsuarioRol { UsuarioAdministrativoId = user.Id, RolId = 3 });
+        await dbContext.SaveChangesAsync();
+
+        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+
+        var assigned = await service.SetRolesForUsuarioAsync(user.Id, new[] { 2, 2, 1 }, CancellationToken.None);
+        Assert.True(assigned);
+
+        var userRoles = await dbContext.UsuarioRoles.Where(x => x.UsuarioAdministrativoId == user.Id).OrderBy(x => x.RolId).ToListAsync();
+        Assert.Equal(new[] { 1, 2 }, userRoles.Select(x => x.RolId));
+
+        var cleared = await service.SetRolesForUsuarioAsync(user.Id, Array.Empty<int>(), CancellationToken.None);
+        Assert.True(cleared);
+        Assert.Empty(await dbContext.UsuarioRoles.Where(x => x.UsuarioAdministrativoId == user.Id).ToListAsync());
+
+        Assert.Equal(1, await dbContext.UsuariosAdministrativos.CountAsync());
+        Assert.Equal(3, await dbContext.Roles.CountAsync());
+    }
+
+    [Fact]
+    public async Task SetUsuarioEstadoAsync_UpdatesEstado_AndPersistsInactive()
+    {
+        var options = new DbContextOptionsBuilder<PanyebarDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var dbContext = new PanyebarDbContext(options);
+        dbContext.UsuariosAdministrativos.Add(new UsuarioAdministrativo { Id = 11, NombreUsuario = "estado.user", PasswordHash = _passwordHashService.Hash("Password123!"), Estado = EstadoRegistro.Activo });
+        await dbContext.SaveChangesAsync();
+
+        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+
+        var result = await service.SetUsuarioEstadoAsync(11, EstadoRegistro.Inactivo, CancellationToken.None);
+
+        Assert.True(result);
+        var user = await dbContext.UsuariosAdministrativos.SingleAsync(x => x.Id == 11);
+        Assert.Equal(EstadoRegistro.Inactivo, user.Estado);
+    }
+
+    [Fact]
+    public async Task SetPermisosForRolAsync_SynchronizesFinalPermissionList_WithoutDuplicating()
+    {
+        var options = new DbContextOptionsBuilder<PanyebarDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var dbContext = new PanyebarDbContext(options);
+
+        var role = new Rol { Id = 4, Nombre = "Supervisor", Estado = EstadoRegistro.Activo };
+        var permiso1 = new Permiso { Id = 1, Codigo = "SEGURIDAD.P1", Nombre = "Permiso 1", Estado = EstadoRegistro.Activo };
+        var permiso2 = new Permiso { Id = 2, Codigo = "SEGURIDAD.P2", Nombre = "Permiso 2", Estado = EstadoRegistro.Activo };
+        dbContext.Roles.Add(role);
+        dbContext.Permisos.AddRange(permiso1, permiso2);
+        dbContext.RolPermisos.Add(new RolPermiso { RolId = role.Id, PermisoId = permiso1.Id });
+        await dbContext.SaveChangesAsync();
+
+        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+
+        var assigned = await service.SetPermisosForRolAsync(role.Id, new[] { 2, 2, 1 }, CancellationToken.None);
+        Assert.True(assigned);
+
+        var permissions = await dbContext.RolPermisos.Where(x => x.RolId == role.Id).OrderBy(x => x.PermisoId).ToListAsync();
+        Assert.Equal(new[] { 1, 2 }, permissions.Select(x => x.PermisoId));
+
+        var cleared = await service.SetPermisosForRolAsync(role.Id, Array.Empty<int>(), CancellationToken.None);
+        Assert.True(cleared);
+        Assert.Empty(await dbContext.RolPermisos.Where(x => x.RolId == role.Id).ToListAsync());
+
+        Assert.Equal(1, await dbContext.Roles.CountAsync());
+        Assert.Equal(2, await dbContext.Permisos.CountAsync());
+    }
+
+    [Fact]
+    public async Task SetRolEstadoAsync_UpdatesEstado_AndPersistsInactive()
+    {
+        var options = new DbContextOptionsBuilder<PanyebarDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var dbContext = new PanyebarDbContext(options);
+        dbContext.Roles.Add(new Rol { Id = 20, Nombre = "EstadoRol", Estado = EstadoRegistro.Activo });
+        await dbContext.SaveChangesAsync();
+
+        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+
+        var result = await service.SetRolEstadoAsync(20, EstadoRegistro.Inactivo, CancellationToken.None);
+
+        Assert.True(result);
+        var role = await dbContext.Roles.SingleAsync(x => x.Id == 20);
+        Assert.Equal(EstadoRegistro.Inactivo, role.Estado);
     }
 
     private sealed class InMemoryAuthenticationRepository : IUsuarioAdministrativoAuthenticationRepository
