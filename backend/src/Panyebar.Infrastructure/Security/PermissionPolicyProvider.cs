@@ -38,8 +38,9 @@ public sealed class PermissionPolicyProvider : IAuthorizationPolicyProvider
         return _fallbackPolicyProvider.GetFallbackPolicyAsync();
     }
 
-    public Task<AuthorizationPolicy?> GetDefaultPolicyAsync()
+    public Task<AuthorizationPolicy> GetDefaultPolicyAsync()
     {
         return _fallbackPolicyProvider.GetDefaultPolicyAsync();
     }
 }
+
