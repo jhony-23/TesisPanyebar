@@ -8,7 +8,7 @@ namespace Panyebar.Api.Controllers;
 public sealed class SecurityVerificationController : ControllerBase
 {
     [HttpGet("administrative")]
-    [Authorize]
+    [Authorize(Policy = "Permission:SEGURIDAD.PRUEBA")]
     public IActionResult Administrative()
     {
         return Ok(new

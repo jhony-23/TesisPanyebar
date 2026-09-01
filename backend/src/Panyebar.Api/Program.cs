@@ -70,6 +70,8 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 var app = builder.Build();
 
