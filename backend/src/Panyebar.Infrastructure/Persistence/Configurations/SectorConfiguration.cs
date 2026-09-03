@@ -11,6 +11,17 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<Sector> builder)
         {
+            builder.Property(s => s.Nombre)
+                .IsRequired()
+                .HasMaxLength(100)
+                .UseCollation("Latin1_General_100_CI_AS");
+
+            builder.Property(s => s.Descripcion)
+                .HasMaxLength(500);
+
+            builder.HasIndex(s => s.Nombre)
+                .IsUnique();
+
             // Relación 1: Sector → Suministro (1 : N)
             builder
                 .HasMany<Suministro>()
