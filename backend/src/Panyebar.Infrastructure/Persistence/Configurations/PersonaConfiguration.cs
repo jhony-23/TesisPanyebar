@@ -11,6 +11,28 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<Persona> builder)
         {
+            builder.Property(p => p.Nombres)
+                .IsRequired()
+                .HasMaxLength(150);
+
+            builder.Property(p => p.Apellidos)
+                .IsRequired()
+                .HasMaxLength(150);
+
+            builder.Property(p => p.Identificacion)
+                .HasMaxLength(50)
+                .UseCollation("Latin1_General_100_CI_AS");
+
+            builder.Property(p => p.Telefono)
+                .HasMaxLength(30);
+
+            builder.Property(p => p.DireccionReferencia)
+                .HasMaxLength(500);
+
+            builder.HasIndex(p => p.Identificacion)
+                .IsUnique()
+                .HasFilter("[Identificacion] IS NOT NULL");
+
             // Relación 2: Persona → PersonaSuministro (1 : N)
             builder
                 .HasMany<PersonaSuministro>()
