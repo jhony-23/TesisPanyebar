@@ -2,6 +2,7 @@ import PageHeader from '../components/ui/PageHeader.jsx'
 import Panel from '../components/ui/Panel.jsx'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import { useAuth } from '../app/useAuth.js'
+import { Link } from 'react-router-dom'
 
 function AdminPage() {
   const { user } = useAuth()
@@ -14,10 +15,20 @@ function AdminPage() {
         title={`Bienvenido, ${user.nombreUsuario}`}
       />
       <Panel className="border-l-4 border-l-[#d6a85f]">
-        <p className="text-sm font-semibold text-slate-900">Panel administrativo</p>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Esta es la base de trabajo para las próximas áreas del sistema. Los módulos se habilitarán conforme se incorporen sus funciones.
-        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Panel administrativo</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Esta es la base de trabajo para las próximas áreas del sistema. Los módulos se habilitarán conforme se incorporen sus funciones.
+            </p>
+          </div>
+          <Link
+            className="inline-flex shrink-0 items-center justify-center rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2"
+            to="/admin/sectores"
+          >
+            Gestionar sectores
+          </Link>
+        </div>
       </Panel>
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel>
