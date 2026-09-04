@@ -36,7 +36,7 @@ function AdminPage() {
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-md bg-[#eef6f5] p-4">
               <p className="text-sm font-semibold text-[#1c5961]">Gestión comunitaria</p>
-              <p className="mt-1 text-xs leading-5 text-slate-600">Personas y suministros estarán disponibles próximamente.</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">La gestión de suministros estará disponible próximamente.</p>
             </div>
             <div className="rounded-md bg-[#f8f1e5] p-4">
               <p className="text-sm font-semibold text-[#795b2e]">Operación del servicio</p>

@@ -7,6 +7,7 @@ import AdminPage from './pages/AdminPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
+import PersonasPage from './pages/PersonasPage.jsx'
 import SectoresPage from './pages/SectoresPage.jsx'
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AdminLayout />}>
               <Route element={<AdminPage />} path="/admin" />
+              <Route element={<PersonasPage />} path="/admin/personas" />
               <Route element={<SectoresPage />} path="/admin/sectores" />
             </Route>
           </Route>

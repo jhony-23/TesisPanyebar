@@ -4,7 +4,7 @@ import { useAuth } from '../app/useAuth.js'
 
 const navigation = [
   { label: 'Inicio', path: '/admin', available: true, icon: 'home' },
-  { label: 'Personas', available: false, icon: 'users' },
+  { label: 'Personas', path: '/admin/personas', available: true, icon: 'users' },
   { label: 'Suministros', available: false, icon: 'drop' },
   { label: 'Obligaciones', available: false, icon: 'document' },
   { label: 'Jornadas', available: false, icon: 'calendar' },
