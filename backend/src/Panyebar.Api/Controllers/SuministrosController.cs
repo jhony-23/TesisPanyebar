@@ -44,6 +44,26 @@ public sealed class SuministrosController : ControllerBase
             : Ok(suministro);
     }
 
+    [HttpGet("{id:int}/qr")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosVer)]
+    public async Task<IActionResult> GetQr(int id, CancellationToken cancellationToken)
+    {
+        var qr = await _suministroService.GetQrAsync(id, cancellationToken);
+        return qr is null
+            ? NotFound(new { message = "Suministro no encontrado." })
+            : Ok(qr);
+    }
+
+    [HttpGet("qr/{token}")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosVer)]
+    public async Task<IActionResult> GetByQrToken(string token, CancellationToken cancellationToken)
+    {
+        var suministro = await _suministroService.GetByQrTokenAsync(token, cancellationToken);
+        return suministro is null
+            ? NotFound(new { message = "Suministro no encontrado." })
+            : Ok(suministro);
+    }
+
     [HttpGet("{id:int}/responsables")]
     [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosVer)]
     public async Task<IActionResult> GetResponsables(int id, CancellationToken cancellationToken)

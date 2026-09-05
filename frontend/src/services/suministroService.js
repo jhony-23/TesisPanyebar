@@ -12,6 +12,14 @@ export function getSuministroByNis(authenticatedRequest, nis) {
   return authenticatedRequest(`${suministroPath}/nis/${encodeURIComponent(nis)}`)
 }
 
+export function getSuministroQr(authenticatedRequest, id) {
+  return authenticatedRequest(`${suministroPath}/${id}/qr`)
+}
+
+export function getSuministroByQrToken(authenticatedRequest, token) {
+  return authenticatedRequest(`${suministroPath}/qr/${encodeURIComponent(token)}`)
+}
+
 export function getSuministroResponsables(authenticatedRequest, id) {
   return authenticatedRequest(`${suministroPath}/${id}/responsables`)
 }

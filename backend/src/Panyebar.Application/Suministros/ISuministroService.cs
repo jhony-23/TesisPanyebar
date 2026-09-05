@@ -7,6 +7,8 @@ public interface ISuministroService
     Task<IReadOnlyList<SuministroDto>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<SuministroDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<SuministroDto?> GetByNisAsync(string nis, CancellationToken cancellationToken = default);
+    Task<SuministroQrDto?> GetQrAsync(int suministroId, CancellationToken cancellationToken = default);
+    Task<SuministroDto?> GetByQrTokenAsync(string token, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ResponsableHistorialDto>?> GetResponsablesAsync(int suministroId, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> CreateAsync(SuministroInput input, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> UpdateAsync(int id, SuministroInput input, CancellationToken cancellationToken = default);
@@ -22,6 +24,11 @@ public sealed record SuministroDto(
     string DireccionReferencia,
     EstadoSuministro Estado,
     ResponsableActualDto? ResponsableActual);
+
+public sealed record SuministroQrDto(
+    int SuministroId,
+    string Nis,
+    string QrValue);
 
 public sealed record ResponsableActualDto(
     int PersonaId,

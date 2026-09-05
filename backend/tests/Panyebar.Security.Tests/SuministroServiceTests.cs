@@ -200,6 +200,56 @@ public class SuministroServiceTests
         Assert.Equal(SuministroOperationError.Invalid, inactivePerson.Error);
     }
 
+    [Fact]
+    public async Task GetQrAsync_ReturnsRelativeValueWithoutExposingTokenSeparately()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Suministros.Add(new Suministro
+        {
+            Id = 10,
+            SectorId = 1,
+            Nis = "PAN-000010",
+            CodigoQrToken = "token-qr-original",
+            DireccionReferencia = "Dirección"
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, "PAN-000011", "token-2");
+        var result = await service.GetQrAsync(10);
+
+        Assert.NotNull(result);
+        Assert.Equal(10, result!.SuministroId);
+        Assert.Equal("PAN-000010", result.Nis);
+        Assert.Equal("/api/suministros/qr/token-qr-original", result.QrValue);
+        Assert.DoesNotContain(result.Nis, result.QrValue);
+        Assert.Equal("token-qr-original", await dbContext.Suministros.Select(s => s.CodigoQrToken).SingleAsync());
+    }
+
+    [Fact]
+    public async Task GetByQrTokenAsync_ReturnsSameSupplyAndNullForUnknownToken()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Centro", Estado = EstadoRegistro.Activo });
+        dbContext.Suministros.Add(new Suministro
+        {
+            Id = 10,
+            SectorId = 1,
+            Nis = "PAN-000010",
+            CodigoQrToken = "token-qr-original",
+            DireccionReferencia = "Dirección"
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, "PAN-000011", "token-2");
+        var result = await service.GetByQrTokenAsync(" token-qr-original ");
+        var missing = await service.GetByQrTokenAsync("missing-token");
+
+        Assert.NotNull(result);
+        Assert.Equal(10, result!.Id);
+        Assert.Equal("PAN-000010", result.Nis);
+        Assert.Null(missing);
+    }
+
     private static PanyebarDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<PanyebarDbContext>()

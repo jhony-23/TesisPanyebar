@@ -56,6 +56,37 @@ public sealed class SuministroService : ISuministroService
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<SuministroQrDto?> GetQrAsync(
+        int suministroId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Suministros
+            .AsNoTracking()
+            .Where(s => s.Id == suministroId)
+            .Select(s => new SuministroQrDto(
+                s.Id,
+                s.Nis,
+                $"/api/suministros/qr/{s.CodigoQrToken}"))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<SuministroDto?> GetByQrTokenAsync(
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedToken = string.IsNullOrWhiteSpace(token) ? null : token.Trim();
+        if (normalizedToken is null)
+        {
+            return Task.FromResult<SuministroDto?>(null);
+        }
+
+        var query = SupplyQuery()
+            .Where(s => s.CodigoQrToken == normalizedToken);
+
+        return ProjectDto(query)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ResponsableHistorialDto>?> GetResponsablesAsync(
         int suministroId,
         CancellationToken cancellationToken = default)
