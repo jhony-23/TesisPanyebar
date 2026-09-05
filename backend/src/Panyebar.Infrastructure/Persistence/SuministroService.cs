@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using Panyebar.Application.Suministros;
 using Panyebar.Domain.Entities;
 using Panyebar.Domain.Enums;
@@ -53,6 +54,40 @@ public sealed class SuministroService : ISuministroService
 
         return ProjectDto(query)
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ResponsableHistorialDto>?> GetResponsablesAsync(
+        int suministroId,
+        CancellationToken cancellationToken = default)
+    {
+        var supplyExists = await _dbContext.Suministros
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == suministroId, cancellationToken);
+        if (!supplyExists)
+        {
+            return null;
+        }
+
+        var relationships = _dbContext.PersonaSuministros
+            .AsNoTracking()
+            .Where(ps => ps.SuministroId == suministroId)
+            .Join(
+                _dbContext.Personas.AsNoTracking(),
+                ps => ps.PersonaId,
+                person => person.Id,
+                (ps, person) => new { Relationship = ps, Person = person })
+            .OrderByDescending(item => item.Relationship.Estado == EstadoRelacionSuministro.Vigente)
+            .ThenByDescending(item => item.Relationship.FechaInicio)
+            .Select(item => new ResponsableHistorialDto(
+                item.Relationship.Id,
+                item.Person.Id,
+                item.Person.Nombres,
+                item.Person.Apellidos,
+                item.Relationship.FechaInicio,
+                item.Relationship.FechaFin,
+                item.Relationship.Estado));
+
+        return await relationships.ToListAsync(cancellationToken);
     }
 
     public async Task<SuministroOperationResult<SuministroDto>> CreateAsync(
@@ -140,6 +175,73 @@ public sealed class SuministroService : ISuministroService
             await ProjectDto(query).SingleAsync(cancellationToken));
     }
 
+    public async Task<SuministroOperationResult<SuministroDto>> SetResponsableAsync(
+        int suministroId,
+        SetResponsableInput input,
+        CancellationToken cancellationToken = default)
+    {
+        if (suministroId <= 0 || input is null || input.PersonaId <= 0)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
+        }
+
+        var suministroExists = await _dbContext.Suministros
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == suministroId, cancellationToken);
+        if (!suministroExists)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.NotFound);
+        }
+
+        var personaIsActive = await _dbContext.Personas
+            .AsNoTracking()
+            .AnyAsync(p => p.Id == input.PersonaId && p.Estado == EstadoRegistro.Activo, cancellationToken);
+        if (!personaIsActive)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var current = await _dbContext.PersonaSuministros
+            .SingleOrDefaultAsync(
+                ps => ps.SuministroId == suministroId && ps.Estado == EstadoRelacionSuministro.Vigente,
+                cancellationToken);
+
+        if (current?.PersonaId == input.PersonaId)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return await GetSupplyResultAsync(suministroId, cancellationToken);
+        }
+
+        if (current is not null)
+        {
+            current.FechaFin = now;
+            current.Estado = EstadoRelacionSuministro.Finalizada;
+        }
+
+        _dbContext.PersonaSuministros.Add(new PersonaSuministro
+        {
+            PersonaId = input.PersonaId,
+            SuministroId = suministroId,
+            FechaInicio = now,
+            Estado = EstadoRelacionSuministro.Vigente
+        });
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Conflict);
+        }
+
+        return await GetSupplyResultAsync(suministroId, cancellationToken);
+    }
+
     private IQueryable<Suministro> SupplyQuery()
     {
         return _dbContext.Suministros.AsNoTracking();
@@ -168,6 +270,15 @@ public sealed class SuministroService : ISuministroService
                 person == null ? null : new ResponsableActualDto(person.Id, person.Nombres, person.Apellidos));
     }
 
+    private async Task<SuministroOperationResult<SuministroDto>> GetSupplyResultAsync(
+        int suministroId,
+        CancellationToken cancellationToken)
+    {
+        var query = SupplyQuery().Where(s => s.Id == suministroId);
+        var dto = await ProjectDto(query).SingleAsync(cancellationToken);
+        return SuministroOperationResult<SuministroDto>.Success(dto);
+    }
+
     private async Task<(int SectorId, string DireccionReferencia)?> NormalizeAsync(
         SuministroInput input,
         CancellationToken cancellationToken)
@@ -188,5 +299,19 @@ public sealed class SuministroService : ISuministroService
             .AnyAsync(s => s.Id == input.SectorId && s.Estado == EstadoRegistro.Activo, cancellationToken);
 
         return sectorIsActive ? (input.SectorId, direccion) : null;
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+    {
+        for (var current = exception.InnerException; current is not null; current = current.InnerException)
+        {
+            if (current is SqlException sqlException &&
+                sqlException.Errors.Cast<SqlError>().Any(error => error.Number is 2601 or 2627))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

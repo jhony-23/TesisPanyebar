@@ -126,6 +126,80 @@ public class SuministroServiceTests
             second => Assert.Equal("PAN-000002", second.Nis));
     }
 
+    [Fact]
+    public async Task GetResponsablesAsync_ReturnsCurrentFirstAndHandlesMissingSupply()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Personas.AddRange(
+            new Persona { Id = 4, Nombres = "Ana", Apellidos = "Pérez" },
+            new Persona { Id = 5, Nombres = "Luis", Apellidos = "Gómez" });
+        dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Centro", Estado = EstadoRegistro.Activo });
+        dbContext.Suministros.Add(new Suministro
+        {
+            Id = 10,
+            SectorId = 1,
+            Nis = "PAN-000010",
+            CodigoQrToken = "token",
+            DireccionReferencia = "Dirección"
+        });
+        dbContext.PersonaSuministros.AddRange(
+            new PersonaSuministro
+            {
+                Id = 1,
+                PersonaId = 4,
+                SuministroId = 10,
+                FechaInicio = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                FechaFin = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                Estado = EstadoRelacionSuministro.Finalizada
+            },
+            new PersonaSuministro
+            {
+                Id = 2,
+                PersonaId = 5,
+                SuministroId = 10,
+                FechaInicio = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                Estado = EstadoRelacionSuministro.Vigente
+            });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, "PAN-000011", "token-2");
+
+        var history = await service.GetResponsablesAsync(10);
+        var missing = await service.GetResponsablesAsync(99);
+
+        Assert.NotNull(history);
+        Assert.Equal(2, history!.Count);
+        Assert.Equal(EstadoRelacionSuministro.Vigente, history[0].Estado);
+        Assert.Equal("Luis", history[0].Nombres);
+        Assert.Equal(EstadoRelacionSuministro.Finalizada, history[1].Estado);
+        Assert.Null(missing);
+    }
+
+    [Fact]
+    public async Task SetResponsableAsync_RejectsInvalidSupplyOrInactivePerson()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Centro", Estado = EstadoRegistro.Activo });
+        dbContext.Suministros.Add(new Suministro
+        {
+            Id = 1,
+            SectorId = 1,
+            Nis = "PAN-000001",
+            CodigoQrToken = "token",
+            DireccionReferencia = "Dirección"
+        });
+        dbContext.Personas.Add(new Persona { Id = 4, Nombres = "Ana", Apellidos = "Pérez", Estado = EstadoRegistro.Inactivo });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, "PAN-000001", "token");
+
+        var missingSupply = await service.SetResponsableAsync(99, new SetResponsableInput(4));
+        var inactivePerson = await service.SetResponsableAsync(1, new SetResponsableInput(4));
+
+        Assert.Equal(SuministroOperationError.NotFound, missingSupply.Error);
+        Assert.Equal(SuministroOperationError.Invalid, inactivePerson.Error);
+    }
+
     private static PanyebarDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<PanyebarDbContext>()

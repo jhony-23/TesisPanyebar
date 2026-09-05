@@ -7,9 +7,11 @@ public interface ISuministroService
     Task<IReadOnlyList<SuministroDto>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<SuministroDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<SuministroDto?> GetByNisAsync(string nis, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ResponsableHistorialDto>?> GetResponsablesAsync(int suministroId, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> CreateAsync(SuministroInput input, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> UpdateAsync(int id, SuministroInput input, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> SetEstadoAsync(int id, EstadoSuministro estado, CancellationToken cancellationToken = default);
+    Task<SuministroOperationResult<SuministroDto>> SetResponsableAsync(int suministroId, SetResponsableInput input, CancellationToken cancellationToken = default);
 }
 
 public sealed record SuministroDto(
@@ -26,6 +28,17 @@ public sealed record ResponsableActualDto(
     string Nombres,
     string Apellidos);
 
+public sealed record ResponsableHistorialDto(
+    int PersonaSuministroId,
+    int PersonaId,
+    string Nombres,
+    string Apellidos,
+    DateTime FechaInicio,
+    DateTime? FechaFin,
+    EstadoRelacionSuministro Estado);
+
+public sealed record SetResponsableInput(int PersonaId);
+
 public sealed record SuministroInput(
     int SectorId,
     string? DireccionReferencia);
@@ -34,7 +47,8 @@ public enum SuministroOperationError
 {
     None,
     Invalid,
-    NotFound
+    NotFound,
+    Conflict
 }
 
 public sealed record SuministroOperationResult<T>(T? Value, SuministroOperationError Error)

@@ -12,6 +12,17 @@ export function getSuministroByNis(authenticatedRequest, nis) {
   return authenticatedRequest(`${suministroPath}/nis/${encodeURIComponent(nis)}`)
 }
 
+export function getSuministroResponsables(authenticatedRequest, id) {
+  return authenticatedRequest(`${suministroPath}/${id}/responsables`)
+}
+
+export function setSuministroResponsable(authenticatedRequest, id, personaId) {
+  return authenticatedRequest(`${suministroPath}/${id}/responsable`, {
+    body: { personaId },
+    method: 'PUT',
+  })
+}
+
 export function createSuministro(authenticatedRequest, suministro) {
   return authenticatedRequest(suministroPath, { body: suministro, method: 'POST' })
 }

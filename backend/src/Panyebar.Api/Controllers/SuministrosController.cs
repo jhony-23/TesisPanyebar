@@ -44,6 +44,30 @@ public sealed class SuministrosController : ControllerBase
             : Ok(suministro);
     }
 
+    [HttpGet("{id:int}/responsables")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosVer)]
+    public async Task<IActionResult> GetResponsables(int id, CancellationToken cancellationToken)
+    {
+        var responsables = await _suministroService.GetResponsablesAsync(id, cancellationToken);
+        return responsables is null
+            ? NotFound(new { message = "Suministro no encontrado." })
+            : Ok(responsables);
+    }
+
+    [HttpPut("{id:int}/responsable")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosGestionar)]
+    public async Task<IActionResult> SetResponsable(int id, [FromBody] SetResponsableInput request, CancellationToken cancellationToken)
+    {
+        var result = await _suministroService.SetResponsableAsync(id, request, cancellationToken);
+        return result.Error switch
+        {
+            SuministroOperationError.Invalid => BadRequest(new { message = "La persona debe existir y estar activa." }),
+            SuministroOperationError.NotFound => NotFound(new { message = "Suministro no encontrado." }),
+            SuministroOperationError.Conflict => Conflict(new { message = "No se pudo establecer el responsable por un conflicto de concurrencia." }),
+            _ => Ok(result.Value)
+        };
+    }
+
     [HttpPost]
     [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosGestionar)]
     public async Task<IActionResult> Create([FromBody] SuministroInput request, CancellationToken cancellationToken)
