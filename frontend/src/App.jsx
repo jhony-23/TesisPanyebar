@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 import PersonasPage from './pages/PersonasPage.jsx'
 import SectoresPage from './pages/SectoresPage.jsx'
+import SuministrosPage from './pages/SuministrosPage.jsx'
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
               <Route element={<AdminPage />} path="/admin" />
               <Route element={<PersonasPage />} path="/admin/personas" />
               <Route element={<SectoresPage />} path="/admin/sectores" />
+              <Route element={<SuministrosPage />} path="/admin/suministros" />
             </Route>
           </Route>
           <Route element={<NotFoundPage />} path="*" />
