@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Panyebar.Application.Security;
+using Panyebar.Application.Suministros;
 using Panyebar.Domain.Entities;
 using Panyebar.Domain.Enums;
 using Panyebar.Infrastructure.Persistence;
@@ -15,6 +16,29 @@ namespace Panyebar.Security.Tests;
 public class PasswordHashingSecurityTests
 {
     private readonly IPasswordHashService _passwordHashService = new PasswordHasherAdapter();
+
+    [Theory]
+    [InlineData(1, "PAN-000001")]
+    [InlineData(25, "PAN-000025")]
+    [InlineData(123, "PAN-000123")]
+    public void NisFormatter_FormatsExpectedValue(long value, string expected)
+    {
+        Assert.Equal(expected, NisFormatter.Format(value));
+    }
+
+    [Fact]
+    public void SuministroQrTokenGenerator_CreatesDistinctUrlSafeTokens()
+    {
+        var generator = new SuministroQrTokenGenerator();
+
+        var first = generator.Generate();
+        var second = generator.Generate();
+
+        Assert.Equal(43, first.Length);
+        Assert.Matches("^[A-Za-z0-9_-]+$", first);
+        Assert.NotEmpty(first);
+        Assert.NotEqual(first, second);
+    }
 
     [Fact]
     public void JwtAccessTokenService_GeneratesValidToken()

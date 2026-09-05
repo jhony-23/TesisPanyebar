@@ -41,6 +41,10 @@ namespace Panyebar.Infrastructure.Persistence
         {
             base.OnModelCreating(modelBuilder);
 
+            modelBuilder.HasSequence<long>("SuministroNisSequence", "dbo")
+                .StartsAt(1)
+                .IncrementsBy(1);
+
             // Aplicar todas las configuraciones de relaciones desde el ensamblado
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(PanyebarDbContext).Assembly);
         }
