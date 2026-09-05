@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<IAdministrativeAccessService, AdministrativeAccessService>();
         services.AddScoped<ISectorService, SectorService>();
         services.AddScoped<IPersonaService, PersonaService>();
+        services.AddScoped<ISuministroService, SuministroService>();
         services.AddScoped<ISuministroNisGenerator, SuministroNisGenerator>();
         services.AddSingleton<ISuministroQrTokenGenerator, SuministroQrTokenGenerator>();
 
