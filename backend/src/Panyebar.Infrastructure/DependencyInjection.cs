@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Panyebar.Application.SolicitudesNuevoServicio;
 using Panyebar.Application.Suministros;
 using Panyebar.Application.Security;
 using Panyebar.Application.Personas;
@@ -36,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<ISectorService, SectorService>();
         services.AddScoped<IPersonaService, PersonaService>();
         services.AddScoped<ISuministroService, SuministroService>();
+        services.AddScoped<ISolicitudNuevoServicioService, SolicitudNuevoServicioService>();
         services.AddScoped<ISuministroNisGenerator, SuministroNisGenerator>();
         services.AddSingleton<ISuministroQrTokenGenerator, SuministroQrTokenGenerator>();
 
