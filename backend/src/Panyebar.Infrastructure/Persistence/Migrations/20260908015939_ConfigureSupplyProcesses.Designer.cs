@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Panyebar.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using Panyebar.Infrastructure.Persistence;
 namespace Panyebar.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PanyebarDbContext))]
-    partial class PanyebarDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908015939_ConfigureSupplyProcesses")]
+    partial class ConfigureSupplyProcesses
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

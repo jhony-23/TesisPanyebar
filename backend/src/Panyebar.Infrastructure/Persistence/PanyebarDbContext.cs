@@ -36,6 +36,8 @@ namespace Panyebar.Infrastructure.Persistence
         public DbSet<IntegranteAdministracion> IntegrantesAdministracion { get; set; }
         public DbSet<Auditoria> Auditorias { get; set; }
         public DbSet<ProgramacionAbastecimiento> ProgramacionesAbastecimiento { get; set; }
+        public DbSet<ProcesoSuministro> ProcesosSuministro { get; set; }
+        public DbSet<SolicitudNuevoServicio> SolicitudesNuevoServicio { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
