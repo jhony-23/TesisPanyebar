@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 import PersonasPage from './pages/PersonasPage.jsx'
 import SectoresPage from './pages/SectoresPage.jsx'
+import SolicitudesNuevoServicioPage from './pages/SolicitudesNuevoServicioPage.jsx'
 import SuministrosPage from './pages/SuministrosPage.jsx'
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
               <Route element={<PersonasPage />} path="/admin/personas" />
               <Route element={<SectoresPage />} path="/admin/sectores" />
               <Route element={<SuministrosPage />} path="/admin/suministros" />
+              <Route element={<SolicitudesNuevoServicioPage />} path="/admin/solicitudes" />
             </Route>
           </Route>
           <Route element={<NotFoundPage />} path="*" />

@@ -1,6 +1,7 @@
 using System.Data;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Panyebar.Application.Suministros;
 
 namespace Panyebar.Infrastructure.Persistence;
@@ -30,6 +31,12 @@ public sealed class SuministroNisGenerator : ISuministroNisGenerator
             await using var command = connection.CreateCommand();
             command.CommandText = SequenceQuery;
             command.CommandType = CommandType.Text;
+
+            var currentTransaction = _dbContext.Database.CurrentTransaction;
+            if (currentTransaction is not null)
+            {
+                command.Transaction = currentTransaction.GetDbTransaction();
+            }
 
             var result = await command.ExecuteScalarAsync(cancellationToken);
             if (result is null || result == DBNull.Value)

@@ -8,13 +8,15 @@ import Panel from '../components/ui/Panel.jsx'
 import { getPersonas } from '../services/personaService.js'
 import { getSectores } from '../services/sectorService.js'
 import {
+  cancelSuministro,
   createSuministro,
   getSuministroByNis,
+  getSuministroProcesos,
   getSuministroQr,
   getSuministroResponsables,
   getSuministros,
+  reconnectSuministro,
   setSuministroResponsable,
-  setSuministroEstado,
   updateSuministro,
 } from '../services/suministroService.js'
 
@@ -28,7 +30,7 @@ function SuministrosPage() {
   const [personas, setPersonas] = useState([])
   const [form, setForm] = useState(initialForm)
   const [editingId, setEditingId] = useState(null)
-  const [pendingStatus, setPendingStatus] = useState(null)
+  const [pendingProcess, setPendingProcess] = useState(null)
   const [searchNis, setSearchNis] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -40,6 +42,8 @@ function SuministrosPage() {
   const [pendingResponsible, setPendingResponsible] = useState(null)
   const [history, setHistory] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [processHistory, setProcessHistory] = useState(null)
+  const [processHistoryLoading, setProcessHistoryLoading] = useState(false)
   const [qrModal, setQrModal] = useState(null)
   const [qrLoading, setQrLoading] = useState(false)
 
@@ -160,17 +164,21 @@ function SuministrosPage() {
     }
   }
 
-  async function changeStatus() {
-    if (!pendingStatus) return
+  async function processSupply(proceso) {
+    if (!pendingProcess) return
     setIsSaving(true)
     setError(null)
     try {
-      const updated = await setSuministroEstado(authenticatedRequest, pendingStatus.id, pendingStatus.estado)
+      const update = pendingProcess.operation === 'cancelar' ? cancelSuministro : reconnectSuministro
+      const updated = await update(authenticatedRequest, pendingProcess.suministro.id, {
+        motivo: proceso.motivo.trim(),
+        observacion: proceso.observacion.trim() || null,
+      })
       setSuministros((current) => current.map((suministro) => suministro.id === updated.id ? updated : suministro))
-      setPendingStatus(null)
-      setFeedback('Estado actualizado correctamente.')
+      setPendingProcess(null)
+      setFeedback(pendingProcess.operation === 'cancelar' ? 'Suministro cancelado correctamente.' : 'Suministro reconectado correctamente.')
     } catch (requestError) {
-      setError(getRequestMessage(requestError, 'No se pudo actualizar el estado del suministro.'))
+      setError(getRequestMessage(requestError, 'No se pudo procesar el cambio de estado.'))
     } finally {
       setIsSaving(false)
     }
@@ -228,6 +236,20 @@ function SuministrosPage() {
     }
   }
 
+  async function showProcessHistory(suministro) {
+    setProcessHistory({ suministro, items: [] })
+    setProcessHistoryLoading(true)
+    try {
+      const items = await getSuministroProcesos(authenticatedRequest, suministro.id)
+      setProcessHistory({ suministro, items: Array.isArray(items) ? items : [] })
+    } catch (requestError) {
+      setProcessHistory(null)
+      setError(getRequestMessage(requestError, 'No se pudo cargar el historial de procesos.'))
+    } finally {
+      setProcessHistoryLoading(false)
+    }
+  }
+
   async function showQr(suministro) {
     setQrLoading(true)
     setError(null)
@@ -270,7 +292,7 @@ function SuministrosPage() {
           <h2 className="text-base font-semibold text-slate-900">Suministros registrados</h2>
           <p className="mt-1 text-sm text-slate-500">{suministros.length} {suministros.length === 1 ? 'suministro' : 'suministros'}</p>
           <div className="mt-5">
-            {isLoading ? <LoadingState message="Cargando suministros..." /> : suministros.length === 0 ? <EmptyState description="Los suministros creados aparecerán aquí." title="No hay suministros registrados" /> : <SupplyList isSaving={isSaving} isQrLoading={qrLoading} onEdit={editSuministro} onHistory={showHistory} onQr={showQr} onResponsible={openResponsibleForm} onStatus={setPendingStatus} suministros={suministros} />}
+            {isLoading ? <LoadingState message="Cargando suministros..." /> : suministros.length === 0 ? <EmptyState description="Los suministros creados aparecerán aquí." title="No hay suministros registrados" /> : <SupplyList isSaving={isSaving} isQrLoading={qrLoading} onEdit={editSuministro} onHistory={showHistory} onProcessHistory={showProcessHistory} onQr={showQr} onResponsible={openResponsibleForm} onProcess={setPendingProcess} suministros={suministros} />}
           </div>
         </Panel>
 
@@ -315,32 +337,32 @@ function SuministrosPage() {
         </Panel>
       </div>
 
-      {pendingStatus && <StatusConfirmation isSaving={isSaving} onCancel={() => setPendingStatus(null)} onConfirm={changeStatus} suministro={suministros.find((item) => item.id === pendingStatus.id)} targetEstado={pendingStatus.estado} />}
+      {pendingProcess && <ProcessDialog isSaving={isSaving} onCancel={() => setPendingProcess(null)} onConfirm={processSupply} operation={pendingProcess.operation} suministro={pendingProcess.suministro} />}
       {pendingResponsible && <ResponsibleConfirmation isSaving={isSaving} onCancel={() => setPendingResponsible(null)} onConfirm={() => assignResponsible(pendingResponsible.suministro.id, pendingResponsible.persona.id)} persona={pendingResponsible.persona} suministro={pendingResponsible.suministro} />}
       {history && <HistoryDialog history={history.items} isLoading={historyLoading} onClose={() => setHistory(null)} suministro={history.suministro} />}
+      {processHistory && <ProcessHistoryDialog history={processHistory.items} isLoading={processHistoryLoading} onClose={() => setProcessHistory(null)} suministro={processHistory.suministro} />}
       {qrModal && <QrDialog onClose={() => setQrModal(null)} qr={qrModal} />}
     </div>
   )
 }
 
-function SupplyList({ isQrLoading, isSaving, onEdit, onHistory, onQr, onResponsible, onStatus, suministros }) {
+function SupplyList({ isQrLoading, isSaving, onEdit, onHistory, onProcessHistory, onQr, onResponsible, onProcess, suministros }) {
   return <>
-    <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[840px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-3 pr-4 font-semibold">NIS</th><th className="pb-3 pr-4 font-semibold">Sector</th><th className="pb-3 pr-4 font-semibold">Dirección</th><th className="pb-3 pr-4 font-semibold">Responsable actual</th><th className="pb-3 pr-4 font-semibold">Estado</th><th className="pb-3 text-right font-semibold">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{suministros.map((suministro) => <SupplyRow isQrLoading={isQrLoading} isSaving={isSaving} key={suministro.id} onEdit={onEdit} onHistory={onHistory} onQr={onQr} onResponsible={onResponsible} onStatus={onStatus} suministro={suministro} />)}</tbody></table></div>
-    <div className="space-y-3 md:hidden">{suministros.map((suministro) => <SupplyCard isQrLoading={isQrLoading} isSaving={isSaving} key={suministro.id} onEdit={onEdit} onHistory={onHistory} onQr={onQr} onResponsible={onResponsible} onStatus={onStatus} suministro={suministro} />)}</div>
+    <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[920px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-3 pr-4 font-semibold">NIS</th><th className="pb-3 pr-4 font-semibold">Sector</th><th className="pb-3 pr-4 font-semibold">Dirección</th><th className="pb-3 pr-4 font-semibold">Responsable actual</th><th className="pb-3 pr-4 font-semibold">Estado</th><th className="pb-3 text-right font-semibold">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{suministros.map((suministro) => <SupplyRow isQrLoading={isQrLoading} isSaving={isSaving} key={suministro.id} onEdit={onEdit} onHistory={onHistory} onProcessHistory={onProcessHistory} onQr={onQr} onResponsible={onResponsible} onProcess={onProcess} suministro={suministro} />)}</tbody></table></div>
+    <div className="space-y-3 md:hidden">{suministros.map((suministro) => <SupplyCard isQrLoading={isQrLoading} isSaving={isSaving} key={suministro.id} onEdit={onEdit} onHistory={onHistory} onProcessHistory={onProcessHistory} onQr={onQr} onResponsible={onResponsible} onProcess={onProcess} suministro={suministro} />)}</div>
   </>
 }
 
-function SupplyRow({ isQrLoading, isSaving, onEdit, onHistory, onQr, onResponsible, onStatus, suministro }) {
-  return <tr><td className="py-4 pr-4 font-semibold text-slate-900">{suministro.nis}</td><td className="py-4 pr-4 text-slate-600">{suministro.sectorNombre}</td><td className="max-w-48 py-4 pr-4 text-slate-600">{suministro.direccionReferencia}</td><td className="py-4 pr-4 text-slate-600">{responsableLabel(suministro)}</td><td className="py-4 pr-4"><StatusBadge estado={suministro.estado} /></td><td className="py-4 text-right"><SupplyActions isQrLoading={isQrLoading} isSaving={isSaving} onEdit={onEdit} onHistory={onHistory} onQr={onQr} onResponsible={onResponsible} onStatus={onStatus} suministro={suministro} /></td></tr>
+function SupplyRow({ isQrLoading, isSaving, onEdit, onHistory, onProcessHistory, onQr, onResponsible, onProcess, suministro }) {
+  return <tr><td className="py-4 pr-4 font-semibold text-slate-900">{suministro.nis}</td><td className="py-4 pr-4 text-slate-600">{suministro.sectorNombre}</td><td className="max-w-48 py-4 pr-4 text-slate-600">{suministro.direccionReferencia}</td><td className="py-4 pr-4 text-slate-600">{responsableLabel(suministro)}</td><td className="py-4 pr-4"><StatusBadge estado={suministro.estado} /></td><td className="py-4 text-right"><SupplyActions isQrLoading={isQrLoading} isSaving={isSaving} onEdit={onEdit} onHistory={onHistory} onProcessHistory={onProcessHistory} onQr={onQr} onResponsible={onResponsible} onProcess={onProcess} suministro={suministro} /></td></tr>
 }
 
-function SupplyCard({ isQrLoading, isSaving, onEdit, onHistory, onQr, onResponsible, onStatus, suministro }) {
-  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{suministro.nis}</h3><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Sector: </dt><dd className="inline">{suministro.sectorNombre}</dd></div><div><dt className="inline font-medium text-slate-500">Dirección: </dt><dd className="inline">{suministro.direccionReferencia}</dd></div><div><dt className="inline font-medium text-slate-500">Responsable: </dt><dd className="inline">{responsableLabel(suministro)}</dd></div></dl></div><StatusBadge estado={suministro.estado} /></div><div className="mt-4 border-t border-slate-100 pt-3"><SupplyActions isQrLoading={isQrLoading} isSaving={isSaving} onEdit={onEdit} onHistory={onHistory} onQr={onQr} onResponsible={onResponsible} onStatus={onStatus} suministro={suministro} /></div></article>
+function SupplyCard({ isQrLoading, isSaving, onEdit, onHistory, onProcessHistory, onQr, onResponsible, onProcess, suministro }) {
+  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{suministro.nis}</h3><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Sector: </dt><dd className="inline">{suministro.sectorNombre}</dd></div><div><dt className="inline font-medium text-slate-500">Dirección: </dt><dd className="inline">{suministro.direccionReferencia}</dd></div><div><dt className="inline font-medium text-slate-500">Responsable: </dt><dd className="inline">{responsableLabel(suministro)}</dd></div></dl></div><StatusBadge estado={suministro.estado} /></div><div className="mt-4 border-t border-slate-100 pt-3"><SupplyActions isQrLoading={isQrLoading} isSaving={isSaving} onEdit={onEdit} onHistory={onHistory} onProcessHistory={onProcessHistory} onQr={onQr} onResponsible={onResponsible} onProcess={onProcess} suministro={suministro} /></div></article>
 }
 
-function SupplyActions({ isQrLoading, isSaving, onEdit, onHistory, onQr, onResponsible, onStatus, suministro }) {
-  const nextEstado = suministro.estado === 1 ? 2 : 1
-  return <div className="flex flex-wrap justify-end gap-2"><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" disabled={isQrLoading} onClick={() => onQr(suministro)} type="button">{isQrLoading ? 'Cargando...' : 'Ver QR'}</button><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onEdit(suministro)} type="button">Editar</button><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onResponsible(suministro)} type="button">{suministro.responsableActual ? 'Cambiar responsable' : 'Asignar responsable'}</button><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onHistory(suministro)} type="button">Historial</button><button className="rounded-md border border-[#28727a]/40 px-3 py-1.5 text-xs font-semibold text-[#1c5961] hover:bg-[#eef6f5] disabled:opacity-60" disabled={isSaving} onClick={() => onStatus({ estado: nextEstado, id: suministro.id })} type="button">{suministro.estado === 1 ? 'Cancelar' : 'Activar'}</button></div>
+function SupplyActions({ isQrLoading, isSaving, onEdit, onHistory, onProcessHistory, onQr, onResponsible, onProcess, suministro }) {
+  return <div className="flex flex-wrap justify-end gap-2"><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" disabled={isQrLoading} onClick={() => onQr(suministro)} type="button">{isQrLoading ? 'Cargando...' : 'Ver QR'}</button><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onEdit(suministro)} type="button">Editar</button><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onResponsible(suministro)} type="button">{suministro.responsableActual ? 'Cambiar responsable' : 'Asignar responsable'}</button><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onHistory(suministro)} type="button">Responsables</button><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onProcessHistory(suministro)} type="button">Procesos</button>{suministro.estado === 1 ? <button className="rounded-md border border-[#28727a]/40 px-3 py-1.5 text-xs font-semibold text-[#1c5961] hover:bg-[#eef6f5] disabled:opacity-60" disabled={isSaving} onClick={() => onProcess({ operation: 'cancelar', suministro })} type="button">Cancelar</button> : <button className="rounded-md border border-[#28727a]/40 px-3 py-1.5 text-xs font-semibold text-[#1c5961] hover:bg-[#eef6f5] disabled:opacity-60" disabled={isSaving} onClick={() => onProcess({ operation: 'reconectar', suministro })} type="button">Reconectar</button>}</div>
 }
 
 function StatusBadge({ estado }) {
@@ -353,10 +375,24 @@ function RelationshipStatusBadge({ estado }) {
   return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${isCurrent ? 'bg-[#e3f2ed] text-[#17644e]' : 'bg-slate-100 text-slate-600'}`}><span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${isCurrent ? 'bg-[#238568]' : 'bg-slate-400'}`} />{isCurrent ? 'Vigente' : 'Finalizada'}</span>
 }
 
-function StatusConfirmation({ isSaving, onCancel, onConfirm, suministro, targetEstado }) {
+function ProcessDialog({ isSaving, onCancel, onConfirm, operation, suministro }) {
+  const [form, setForm] = useState({ motivo: '', observacion: '' })
+  const [error, setError] = useState(null)
   if (!suministro) return null
-  const action = targetEstado === 1 ? 'activar' : 'cancelar'
-  return <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog"><div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"><h2 className="text-lg font-semibold text-slate-900">¿Quieres {action} este suministro?</h2><p className="mt-2 text-sm leading-6 text-slate-600">El suministro <strong>{suministro.nis}</strong> quedará como {targetEstado === 1 ? 'Activo' : 'Cancelado'}.</p><div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100" onClick={onCancel} type="button">Cancelar</button><button className="rounded-md bg-[#123b43] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={isSaving} onClick={onConfirm} type="button">{isSaving ? 'Actualizando...' : `Sí, ${action}`}</button></div></div></div>
+  const isCancellation = operation === 'cancelar'
+
+  function submit(event) {
+    event.preventDefault()
+    const motivo = form.motivo.trim()
+    const observacion = form.observacion.trim()
+    if (!motivo) return setError('El motivo es obligatorio.')
+    if (motivo.length > 250) return setError('El motivo no puede superar 250 caracteres.')
+    if (observacion.length > 1000) return setError('La observación no puede superar 1000 caracteres.')
+    setError(null)
+    onConfirm({ motivo, observacion })
+  }
+
+  return <div aria-labelledby="process-dialog-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4" role="dialog"><div className="my-4 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg bg-white p-6 shadow-xl"><h2 className="text-lg font-semibold text-slate-900" id="process-dialog-title">{isCancellation ? 'Cancelar suministro' : 'Reconectar suministro'}</h2><p className="mt-2 text-sm leading-6 text-slate-600">NIS: <strong>{suministro.nis}</strong></p><form className="mt-5 space-y-4" onSubmit={submit}><div><label className="text-sm font-medium text-slate-700" htmlFor="process-motivo">Motivo <span className="text-red-700">*</span></label><textarea autoFocus className="mt-1.5 block min-h-24 w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" id="process-motivo" maxLength="250" onChange={(event) => setForm((current) => ({ ...current, motivo: event.target.value }))} required rows="3" value={form.motivo} /><p className="mt-1 text-right text-xs text-slate-400">{form.motivo.length}/250</p></div><div><label className="text-sm font-medium text-slate-700" htmlFor="process-observacion">Observación <span className="font-normal text-slate-400">(opcional)</span></label><textarea className="mt-1.5 block min-h-24 w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" id="process-observacion" maxLength="1000" onChange={(event) => setForm((current) => ({ ...current, observacion: event.target.value }))} rows="3" value={form.observacion} /><p className="mt-1 text-right text-xs text-slate-400">{form.observacion.length}/1000</p></div>{error && <p className="text-sm text-red-700" role="alert">{error}</p>}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100" disabled={isSaving} onClick={onCancel} type="button">Volver</button><button className="rounded-md bg-[#123b43] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? 'Guardando...' : isCancellation ? 'Confirmar cancelación' : 'Confirmar reconexión'}</button></div></form></div></div>
 }
 
 function ResponsibleConfirmation({ isSaving, onCancel, onConfirm, persona, suministro }) {
@@ -370,6 +406,10 @@ function QrDialog({ onClose, qr }) {
 
 function HistoryDialog({ history, isLoading, onClose, suministro }) {
   return <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog"><div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-semibold text-slate-900">Historial de responsables</h2><p className="mt-1 text-sm text-slate-500">{suministro.nis}</p></div><button aria-label="Cerrar historial" className="rounded-md px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100" onClick={onClose} type="button">Cerrar</button></div>{isLoading ? <div className="mt-5"><LoadingState message="Cargando historial..." /></div> : history.length === 0 ? <div className="mt-5"><EmptyState description="Este suministro aún no tiene responsables registrados." title="Sin historial" /></div> : <div className="mt-5 space-y-3">{history.map((item) => <div className="rounded-md border border-slate-200 p-4" key={item.personaSuministroId}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{item.nombres} {item.apellidos}</p><p className="mt-1 text-sm text-slate-500">Inicio: {formatDate(item.fechaInicio)}</p><p className="text-sm text-slate-500">Fin: {item.fechaFin ? formatDate(item.fechaFin) : 'Actual'}</p></div><RelationshipStatusBadge estado={item.estado} /></div></div>)}</div>}</div></div>
+}
+
+function ProcessHistoryDialog({ history, isLoading, onClose, suministro }) {
+  return <div aria-labelledby="process-history-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4" role="dialog"><div className="my-4 max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-semibold text-slate-900" id="process-history-title">Historial de procesos</h2><p className="mt-1 text-sm text-slate-500">NIS: {suministro.nis}</p></div><button aria-label="Cerrar historial de procesos" className="rounded-md px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100" onClick={onClose} type="button">Cerrar</button></div>{isLoading ? <div className="mt-5"><LoadingState message="Cargando procesos..." /></div> : history.length === 0 ? <div className="mt-5"><EmptyState description="Este suministro aún no tiene cancelaciones ni reconexiones registradas." title="Sin procesos" /></div> : <div className="mt-5 space-y-3">{history.map((item) => <article className="rounded-md border border-slate-200 p-4" key={item.procesoSuministroId}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-slate-900">{item.tipoProceso === 1 ? 'Cancelación' : 'Reconexión'}</p><p className="mt-1 text-sm text-slate-600">{estadoLabel(item.estadoAnterior)} → {estadoLabel(item.estadoNuevo)}</p><p className="mt-1 text-sm text-slate-500">{formatDate(item.fecha)} · {item.usuario}</p></div></div><dl className="mt-3 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Motivo: </dt><dd className="inline">{item.motivo}</dd></div>{item.observacion && <div><dt className="inline font-medium text-slate-500">Observación: </dt><dd className="inline">{item.observacion}</dd></div>}</dl></article>)}</div>}</div></div>
 }
 
 function Alert({ message, onDismiss }) {
@@ -386,10 +426,15 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-GT')
 }
 
+function estadoLabel(estado) {
+  return estado === 1 ? 'Activo' : estado === 2 ? 'Cancelado' : 'Desconocido'
+}
+
 function getRequestMessage(error, fallback) {
   if (error?.status === 400) return 'Los datos proporcionados no son válidos.'
   if (error?.status === 403) return 'No tienes permiso para realizar esta operación.'
   if (error?.status === 404) return 'El suministro ya no existe.'
+  if (error?.status === 409) return 'El estado del suministro cambió y esta operación ya no puede realizarse.'
   if (error?.kind === 'network') return 'No se pudo conectar con el servidor.'
   if (error?.status >= 500) return 'Ocurrió un error en el servidor. Intenta nuevamente.'
   return fallback

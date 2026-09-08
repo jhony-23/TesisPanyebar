@@ -39,9 +39,20 @@ export function updateSuministro(authenticatedRequest, id, suministro) {
   return authenticatedRequest(`${suministroPath}/${id}`, { body: suministro, method: 'PUT' })
 }
 
-export function setSuministroEstado(authenticatedRequest, id, estado) {
-  return authenticatedRequest(`${suministroPath}/${id}/estado`, {
-    body: { estado },
-    method: 'PATCH',
+export function cancelSuministro(authenticatedRequest, id, proceso) {
+  return authenticatedRequest(`${suministroPath}/${id}/cancelacion`, {
+    body: proceso,
+    method: 'POST',
   })
+}
+
+export function reconnectSuministro(authenticatedRequest, id, proceso) {
+  return authenticatedRequest(`${suministroPath}/${id}/reconexion`, {
+    body: proceso,
+    method: 'POST',
+  })
+}
+
+export function getSuministroProcesos(authenticatedRequest, id) {
+  return authenticatedRequest(`${suministroPath}/${id}/procesos`)
 }
