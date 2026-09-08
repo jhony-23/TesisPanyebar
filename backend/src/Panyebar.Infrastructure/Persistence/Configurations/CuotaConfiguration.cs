@@ -11,6 +11,13 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<Cuota> builder)
         {
+            builder.Property(c => c.Nombre)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            builder.Property(c => c.Descripcion)
+                .HasMaxLength(500);
+
             // Relación 6: Cuota → Obligacion (1 : N, optional)
             builder
                 .HasMany<Obligacion>()

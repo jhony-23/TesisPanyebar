@@ -5,6 +5,7 @@ namespace Panyebar.Domain.Enums
     /// </summary>
     public enum PeriodicidadCuota
     {
-        Anual = 1
+        Anual = 1,
+        Mensual = 2
     }
 }

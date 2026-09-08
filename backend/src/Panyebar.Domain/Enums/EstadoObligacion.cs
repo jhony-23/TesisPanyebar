@@ -6,6 +6,7 @@ namespace Panyebar.Domain.Enums
     public enum EstadoObligacion
     {
         Pendiente = 1,
-        Pagada = 2
+        Pagada = 2,
+        Anulada = 3
     }
 }

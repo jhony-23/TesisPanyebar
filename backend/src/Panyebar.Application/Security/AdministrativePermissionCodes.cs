@@ -14,4 +14,8 @@ public static class AdministrativePermissionCodes
     public const string PersonasGestionar = "PERSONAS.GESTIONAR";
     public const string SuministrosVer = "SUMINISTROS.VER";
     public const string SuministrosGestionar = "SUMINISTROS.GESTIONAR";
+    public const string CuotasVer = "CUOTAS.VER";
+    public const string CuotasGestionar = "CUOTAS.GESTIONAR";
+    public const string ObligacionesVer = "OBLIGACIONES.VER";
+    public const string ObligacionesGestionar = "OBLIGACIONES.GESTIONAR";
 }
