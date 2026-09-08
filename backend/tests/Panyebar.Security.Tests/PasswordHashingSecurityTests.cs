@@ -58,6 +58,8 @@ public class PasswordHashingSecurityTests
         var token = tokenHandler.ReadJwtToken(result.Token);
 
         Assert.False(string.IsNullOrWhiteSpace(result.Token));
+        Assert.Equal("7", token.Claims.First(x => x.Type == JwtRegisteredClaimNames.Sub).Value);
+        Assert.Equal("admin", token.Claims.First(x => x.Type == JwtRegisteredClaimNames.UniqueName).Value);
         Assert.Equal("7", token.Claims.First(x => x.Type == ClaimTypes.NameIdentifier).Value);
         Assert.Equal("admin", token.Claims.First(x => x.Type == ClaimTypes.Name).Value);
         Assert.True(result.ExpiresAtUtc > DateTimeOffset.UtcNow);

@@ -121,6 +121,37 @@ public sealed class SuministroService : ISuministroService
         return await relationships.ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ProcesoSuministroDto>?> GetProcesosAsync(
+        int suministroId,
+        CancellationToken cancellationToken = default)
+    {
+        var supplyExists = await _dbContext.Suministros
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == suministroId, cancellationToken);
+        if (!supplyExists)
+        {
+            return null;
+        }
+
+        return await (
+            from process in _dbContext.ProcesosSuministro.AsNoTracking()
+            join user in _dbContext.UsuariosAdministrativos.AsNoTracking()
+                on process.UsuarioAdministrativoId equals user.Id
+            where process.SuministroId == suministroId
+            orderby process.Fecha descending, process.Id descending
+            select new ProcesoSuministroDto(
+                process.Id,
+                process.TipoProceso,
+                process.EstadoAnterior,
+                process.EstadoNuevo,
+                process.Fecha,
+                process.UsuarioAdministrativoId,
+                user.NombreUsuario,
+                process.Motivo,
+                process.Observacion))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<SuministroOperationResult<SuministroDto>> CreateAsync(
         SuministroInput input,
         CancellationToken cancellationToken = default)
@@ -179,31 +210,38 @@ public sealed class SuministroService : ISuministroService
             await ProjectDto(query).SingleAsync(cancellationToken));
     }
 
-    public async Task<SuministroOperationResult<SuministroDto>> SetEstadoAsync(
-        int id,
-        EstadoSuministro estado,
+    public Task<SuministroOperationResult<SuministroDto>> CancelAsync(
+        int suministroId,
+        SuministroProcesoInput input,
+        int usuarioAdministrativoId,
         CancellationToken cancellationToken = default)
     {
-        if (!Enum.IsDefined(typeof(EstadoSuministro), estado))
-        {
-            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
-        }
+        return ProcessSupplyAsync(
+            suministroId,
+            input,
+            usuarioAdministrativoId,
+            EstadoSuministro.Activo,
+            EstadoSuministro.Cancelado,
+            TipoProcesoSuministro.Cancelacion,
+            "SUMINISTRO.CANCELAR",
+            cancellationToken);
+    }
 
-        var suministro = await _dbContext.Suministros
-            .SingleOrDefaultAsync(s => s.Id == id, cancellationToken);
-        if (suministro is null)
-        {
-            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.NotFound);
-        }
-
-        suministro.Estado = estado;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        var query = SupplyQuery()
-            .Where(s => s.Id == id);
-
-        return SuministroOperationResult<SuministroDto>.Success(
-            await ProjectDto(query).SingleAsync(cancellationToken));
+    public Task<SuministroOperationResult<SuministroDto>> ReconnectAsync(
+        int suministroId,
+        SuministroProcesoInput input,
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default)
+    {
+        return ProcessSupplyAsync(
+            suministroId,
+            input,
+            usuarioAdministrativoId,
+            EstadoSuministro.Cancelado,
+            EstadoSuministro.Activo,
+            TipoProcesoSuministro.Reconexion,
+            "SUMINISTRO.RECONECTAR",
+            cancellationToken);
     }
 
     public async Task<SuministroOperationResult<SuministroDto>> SetResponsableAsync(
@@ -310,6 +348,100 @@ public sealed class SuministroService : ISuministroService
         return SuministroOperationResult<SuministroDto>.Success(dto);
     }
 
+    private async Task<SuministroOperationResult<SuministroDto>> ProcessSupplyAsync(
+        int suministroId,
+        SuministroProcesoInput input,
+        int usuarioAdministrativoId,
+        EstadoSuministro expectedState,
+        EstadoSuministro newState,
+        TipoProcesoSuministro processType,
+        string auditAction,
+        CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeProcessInput(input);
+        if (suministroId <= 0 || normalized is null || usuarioAdministrativoId <= 0)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
+        }
+
+        var suministro = await _dbContext.Suministros
+            .SingleOrDefaultAsync(s => s.Id == suministroId, cancellationToken);
+        if (suministro is null)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.NotFound);
+        }
+
+        if (suministro.Estado != expectedState)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Conflict);
+        }
+
+        var userExists = await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == usuarioAdministrativoId, cancellationToken);
+        if (!userExists)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
+        }
+
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+        if (_dbContext.Database.IsRelational())
+        {
+            transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        }
+
+        try
+        {
+            var now = DateTime.UtcNow;
+            suministro.Estado = newState;
+            _dbContext.ProcesosSuministro.Add(new ProcesoSuministro
+            {
+                SuministroId = suministroId,
+                TipoProceso = processType,
+                EstadoAnterior = expectedState,
+                EstadoNuevo = newState,
+                Fecha = now,
+                UsuarioAdministrativoId = usuarioAdministrativoId,
+                Motivo = normalized.Value.Motivo,
+                Observacion = normalized.Value.Observacion
+            });
+            _dbContext.Auditorias.Add(new Auditoria
+            {
+                UsuarioAdministrativoId = usuarioAdministrativoId,
+                Accion = auditAction,
+                Entidad = "Suministro",
+                EntidadId = suministroId,
+                Fecha = now,
+                ValorAnterior = expectedState.ToString(),
+                ValorNuevo = newState.ToString()
+            });
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
+
+            throw;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
+
+        return await GetSupplyResultAsync(suministroId, cancellationToken);
+    }
+
     private async Task<(int SectorId, string DireccionReferencia)?> NormalizeAsync(
         SuministroInput input,
         CancellationToken cancellationToken)
@@ -330,6 +462,30 @@ public sealed class SuministroService : ISuministroService
             .AnyAsync(s => s.Id == input.SectorId && s.Estado == EstadoRegistro.Activo, cancellationToken);
 
         return sectorIsActive ? (input.SectorId, direccion) : null;
+    }
+
+    private static (string Motivo, string? Observacion)? NormalizeProcessInput(SuministroProcesoInput input)
+    {
+        if (input is null || string.IsNullOrWhiteSpace(input.Motivo))
+        {
+            return null;
+        }
+
+        var motivo = input.Motivo.Trim();
+        if (motivo.Length > 250)
+        {
+            return null;
+        }
+
+        var observacion = string.IsNullOrWhiteSpace(input.Observacion)
+            ? null
+            : input.Observacion.Trim();
+        if (observacion?.Length > 1000)
+        {
+            return null;
+        }
+
+        return (motivo, observacion);
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception)

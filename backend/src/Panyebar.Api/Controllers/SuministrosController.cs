@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using Panyebar.Application.Security;
 using Panyebar.Application.Suministros;
-using Panyebar.Domain.Enums;
 
 namespace Panyebar.Api.Controllers;
 
@@ -74,6 +74,38 @@ public sealed class SuministrosController : ControllerBase
             : Ok(responsables);
     }
 
+    [HttpGet("{id:int}/procesos")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosVer)]
+    public async Task<IActionResult> GetProcesos(int id, CancellationToken cancellationToken)
+    {
+        var procesos = await _suministroService.GetProcesosAsync(id, cancellationToken);
+        return procesos is null
+            ? NotFound(new { message = "Suministro no encontrado." })
+            : Ok(procesos);
+    }
+
+    [HttpPost("{id:int}/cancelacion")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosGestionar)]
+    public Task<IActionResult> Cancel(int id, [FromBody] SuministroProcesoInput request, CancellationToken cancellationToken)
+    {
+        return ProcessStateChangeAsync(
+            id,
+            request,
+            (usuarioId, token) => _suministroService.CancelAsync(id, request, usuarioId, token),
+            cancellationToken);
+    }
+
+    [HttpPost("{id:int}/reconexion")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosGestionar)]
+    public Task<IActionResult> Reconnect(int id, [FromBody] SuministroProcesoInput request, CancellationToken cancellationToken)
+    {
+        return ProcessStateChangeAsync(
+            id,
+            request,
+            (usuarioId, token) => _suministroService.ReconnectAsync(id, request, usuarioId, token),
+            cancellationToken);
+    }
+
     [HttpPut("{id:int}/responsable")]
     [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosGestionar)]
     public async Task<IActionResult> SetResponsable(int id, [FromBody] SetResponsableInput request, CancellationToken cancellationToken)
@@ -113,26 +145,26 @@ public sealed class SuministrosController : ControllerBase
         };
     }
 
-    [HttpPatch("{id:int}/estado")]
-    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosGestionar)]
-    public async Task<IActionResult> SetEstado(int id, [FromBody] UpdateSuministroEstadoRequest request, CancellationToken cancellationToken)
+    private async Task<IActionResult> ProcessStateChangeAsync(
+        int id,
+        SuministroProcesoInput request,
+        Func<int, CancellationToken, Task<SuministroOperationResult<SuministroDto>>> operation,
+        CancellationToken cancellationToken)
     {
-        if (request is null || !Enum.IsDefined(typeof(EstadoSuministro), request.Estado))
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+        if (!int.TryParse(claim, out var usuarioAdministrativoId) || usuarioAdministrativoId <= 0)
         {
-            return BadRequest(new { message = "Estado no válido." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario administrativo autenticado." });
         }
 
-        var result = await _suministroService.SetEstadoAsync(id, request.Estado, cancellationToken);
+        var result = await operation(usuarioAdministrativoId, cancellationToken);
         return result.Error switch
         {
-            SuministroOperationError.Invalid => BadRequest(new { message = "Estado no válido." }),
+            SuministroOperationError.Invalid => BadRequest(new { message = "El motivo es obligatorio y debe respetar las longitudes permitidas." }),
             SuministroOperationError.NotFound => NotFound(new { message = "Suministro no encontrado." }),
+            SuministroOperationError.Conflict => Conflict(new { message = "La transición no está permitida para el estado actual del suministro." }),
             _ => Ok(result.Value)
         };
     }
-}
-
-public sealed class UpdateSuministroEstadoRequest
-{
-    public EstadoSuministro Estado { get; set; }
 }

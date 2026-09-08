@@ -10,9 +10,11 @@ public interface ISuministroService
     Task<SuministroQrDto?> GetQrAsync(int suministroId, CancellationToken cancellationToken = default);
     Task<SuministroDto?> GetByQrTokenAsync(string token, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ResponsableHistorialDto>?> GetResponsablesAsync(int suministroId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProcesoSuministroDto>?> GetProcesosAsync(int suministroId, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> CreateAsync(SuministroInput input, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> UpdateAsync(int id, SuministroInput input, CancellationToken cancellationToken = default);
-    Task<SuministroOperationResult<SuministroDto>> SetEstadoAsync(int id, EstadoSuministro estado, CancellationToken cancellationToken = default);
+    Task<SuministroOperationResult<SuministroDto>> CancelAsync(int suministroId, SuministroProcesoInput input, int usuarioAdministrativoId, CancellationToken cancellationToken = default);
+    Task<SuministroOperationResult<SuministroDto>> ReconnectAsync(int suministroId, SuministroProcesoInput input, int usuarioAdministrativoId, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> SetResponsableAsync(int suministroId, SetResponsableInput input, CancellationToken cancellationToken = default);
 }
 
@@ -45,6 +47,19 @@ public sealed record ResponsableHistorialDto(
     EstadoRelacionSuministro Estado);
 
 public sealed record SetResponsableInput(int PersonaId);
+
+public sealed record SuministroProcesoInput(string? Motivo, string? Observacion);
+
+public sealed record ProcesoSuministroDto(
+    int ProcesoSuministroId,
+    TipoProcesoSuministro TipoProceso,
+    EstadoSuministro EstadoAnterior,
+    EstadoSuministro EstadoNuevo,
+    DateTime Fecha,
+    int UsuarioAdministrativoId,
+    string Usuario,
+    string Motivo,
+    string? Observacion);
 
 public sealed record SuministroInput(
     int SectorId,
