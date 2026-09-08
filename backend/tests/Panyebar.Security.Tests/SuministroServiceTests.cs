@@ -189,15 +189,86 @@ public class SuministroServiceTests
             DireccionReferencia = "Dirección"
         });
         dbContext.Personas.Add(new Persona { Id = 4, Nombres = "Ana", Apellidos = "Pérez", Estado = EstadoRegistro.Inactivo });
+        dbContext.UsuariosAdministrativos.Add(new UsuarioAdministrativo { Id = 8, NombreUsuario = "admin" });
         await dbContext.SaveChangesAsync();
 
         var service = CreateService(dbContext, "PAN-000001", "token");
 
-        var missingSupply = await service.SetResponsableAsync(99, new SetResponsableInput(4));
-        var inactivePerson = await service.SetResponsableAsync(1, new SetResponsableInput(4));
+        var missingSupply = await service.SetResponsableAsync(99, new SetResponsableInput(4), 8);
+        var inactivePerson = await service.SetResponsableAsync(1, new SetResponsableInput(4), 8);
 
         Assert.Equal(SuministroOperationError.NotFound, missingSupply.Error);
         Assert.Equal(SuministroOperationError.Invalid, inactivePerson.Error);
+    }
+
+    [Fact]
+    public async Task SetResponsableAsync_AuditsInitialAndChangedResponsibleWithoutDuplicatingSameAssignment()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Centro", Estado = EstadoRegistro.Activo });
+        dbContext.Personas.AddRange(
+            new Persona { Id = 4, Nombres = "Ana", Apellidos = "Pérez", Estado = EstadoRegistro.Activo },
+            new Persona { Id = 5, Nombres = "Luis", Apellidos = "Gómez", Estado = EstadoRegistro.Activo });
+        dbContext.UsuariosAdministrativos.Add(new UsuarioAdministrativo { Id = 8, NombreUsuario = "admin" });
+        dbContext.Suministros.Add(new Suministro
+        {
+            Id = 10,
+            SectorId = 1,
+            Nis = "PAN-000010",
+            CodigoQrToken = "token-original",
+            DireccionReferencia = "Dirección"
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, "PAN-000011", "token-no-usado");
+        var initial = await service.SetResponsableAsync(10, new SetResponsableInput(4), 8);
+        var same = await service.SetResponsableAsync(10, new SetResponsableInput(4), 8);
+        var changed = await service.SetResponsableAsync(10, new SetResponsableInput(5), 8);
+
+        Assert.True(initial.Succeeded);
+        Assert.True(same.Succeeded);
+        Assert.True(changed.Succeeded);
+        Assert.Equal(2, await dbContext.PersonaSuministros.CountAsync());
+        var relationships = await dbContext.PersonaSuministros.OrderBy(ps => ps.Id).ToListAsync();
+        Assert.Equal(EstadoRelacionSuministro.Finalizada, relationships[0].Estado);
+        Assert.Equal(EstadoRelacionSuministro.Vigente, relationships[1].Estado);
+        Assert.Equal(4, relationships[0].PersonaId);
+        Assert.Equal(5, relationships[1].PersonaId);
+
+        var audits = await dbContext.Auditorias.OrderBy(a => a.Id).ToListAsync();
+        Assert.Equal(2, audits.Count);
+        Assert.Equal("SUMINISTRO.RESPONSABLE.ASIGNAR", audits[0].Accion);
+        Assert.Equal("Sin responsable", audits[0].ValorAnterior);
+        Assert.Equal("PersonaId:4", audits[0].ValorNuevo);
+        Assert.Equal("SUMINISTRO.RESPONSABLE.CAMBIAR", audits[1].Accion);
+        Assert.Equal("PersonaId:4", audits[1].ValorAnterior);
+        Assert.Equal("PersonaId:5", audits[1].ValorNuevo);
+        Assert.Equal("PAN-000010", changed.Value!.Nis);
+        Assert.Equal("token-original", await dbContext.Suministros.Select(s => s.CodigoQrToken).SingleAsync());
+    }
+
+    [Fact]
+    public async Task SetResponsableAsync_RejectsUnknownAdministrativeUser()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Centro", Estado = EstadoRegistro.Activo });
+        dbContext.Personas.Add(new Persona { Id = 4, Nombres = "Ana", Apellidos = "Pérez", Estado = EstadoRegistro.Activo });
+        dbContext.Suministros.Add(new Suministro
+        {
+            Id = 10,
+            SectorId = 1,
+            Nis = "PAN-000010",
+            CodigoQrToken = "token",
+            DireccionReferencia = "Dirección"
+        });
+        await dbContext.SaveChangesAsync();
+
+        var result = await CreateService(dbContext, "PAN-000011", "token-2")
+            .SetResponsableAsync(10, new SetResponsableInput(4), 99);
+
+        Assert.Equal(SuministroOperationError.Invalid, result.Error);
+        Assert.Empty(await dbContext.PersonaSuministros.ToListAsync());
+        Assert.Empty(await dbContext.Auditorias.ToListAsync());
     }
 
     [Fact]

@@ -110,7 +110,14 @@ public sealed class SuministrosController : ControllerBase
     [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosGestionar)]
     public async Task<IActionResult> SetResponsable(int id, [FromBody] SetResponsableInput request, CancellationToken cancellationToken)
     {
-        var result = await _suministroService.SetResponsableAsync(id, request, cancellationToken);
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+        if (!int.TryParse(claim, out var usuarioAdministrativoId) || usuarioAdministrativoId <= 0)
+        {
+            return Unauthorized(new { message = "No se pudo identificar al usuario administrativo autenticado." });
+        }
+
+        var result = await _suministroService.SetResponsableAsync(id, request, usuarioAdministrativoId, cancellationToken);
         return result.Error switch
         {
             SuministroOperationError.Invalid => BadRequest(new { message = "La persona debe existir y estar activa." }),

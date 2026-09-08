@@ -15,7 +15,7 @@ public interface ISuministroService
     Task<SuministroOperationResult<SuministroDto>> UpdateAsync(int id, SuministroInput input, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> CancelAsync(int suministroId, SuministroProcesoInput input, int usuarioAdministrativoId, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> ReconnectAsync(int suministroId, SuministroProcesoInput input, int usuarioAdministrativoId, CancellationToken cancellationToken = default);
-    Task<SuministroOperationResult<SuministroDto>> SetResponsableAsync(int suministroId, SetResponsableInput input, CancellationToken cancellationToken = default);
+    Task<SuministroOperationResult<SuministroDto>> SetResponsableAsync(int suministroId, SetResponsableInput input, int usuarioAdministrativoId, CancellationToken cancellationToken = default);
 }
 
 public sealed record SuministroDto(

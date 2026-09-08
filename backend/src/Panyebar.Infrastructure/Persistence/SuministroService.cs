@@ -247,9 +247,10 @@ public sealed class SuministroService : ISuministroService
     public async Task<SuministroOperationResult<SuministroDto>> SetResponsableAsync(
         int suministroId,
         SetResponsableInput input,
+        int usuarioAdministrativoId,
         CancellationToken cancellationToken = default)
     {
-        if (suministroId <= 0 || input is null || input.PersonaId <= 0)
+        if (suministroId <= 0 || input is null || input.PersonaId <= 0 || usuarioAdministrativoId <= 0)
         {
             return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
         }
@@ -270,7 +271,20 @@ public sealed class SuministroService : ISuministroService
             return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
         }
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var userExists = await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == usuarioAdministrativoId, cancellationToken);
+        if (!userExists)
+        {
+            return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Invalid);
+        }
+
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+        if (_dbContext.Database.IsRelational())
+        {
+            transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        }
+
         var now = DateTime.UtcNow;
         var current = await _dbContext.PersonaSuministros
             .SingleOrDefaultAsync(
@@ -279,7 +293,12 @@ public sealed class SuministroService : ISuministroService
 
         if (current?.PersonaId == input.PersonaId)
         {
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                await transaction.DisposeAsync();
+            }
+
             return await GetSupplyResultAsync(suministroId, cancellationToken);
         }
 
@@ -297,15 +316,39 @@ public sealed class SuministroService : ISuministroService
             Estado = EstadoRelacionSuministro.Vigente
         });
 
+        _dbContext.Auditorias.Add(new Auditoria
+        {
+            UsuarioAdministrativoId = usuarioAdministrativoId,
+            Accion = current is null ? "SUMINISTRO.RESPONSABLE.ASIGNAR" : "SUMINISTRO.RESPONSABLE.CAMBIAR",
+            Entidad = "Suministro",
+            EntidadId = suministroId,
+            Fecha = now,
+            ValorAnterior = current is null ? "Sin responsable" : $"PersonaId:{current.PersonaId}",
+            ValorNuevo = $"PersonaId:{input.PersonaId}"
+        });
+
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
         }
         catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             return SuministroOperationResult<SuministroDto>.Failure(SuministroOperationError.Conflict);
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
         }
 
         return await GetSupplyResultAsync(suministroId, cancellationToken);
