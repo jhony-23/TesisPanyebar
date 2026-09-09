@@ -7,6 +7,8 @@ using Panyebar.Application.Suministros;
 using Panyebar.Application.Security;
 using Panyebar.Application.Personas;
 using Panyebar.Application.Sectores;
+using Panyebar.Application.Cuotas;
+using Panyebar.Application.Obligaciones;
 using Panyebar.Infrastructure.Persistence;
 using Panyebar.Infrastructure.Security;
 
@@ -38,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<IPersonaService, PersonaService>();
         services.AddScoped<ISuministroService, SuministroService>();
         services.AddScoped<ISolicitudNuevoServicioService, SolicitudNuevoServicioService>();
+        services.AddScoped<ICuotaService, CuotaService>();
+        services.AddScoped<IObligacionService, ObligacionService>();
         services.AddScoped<ISuministroNisGenerator, SuministroNisGenerator>();
         services.AddSingleton<ISuministroQrTokenGenerator, SuministroQrTokenGenerator>();
 

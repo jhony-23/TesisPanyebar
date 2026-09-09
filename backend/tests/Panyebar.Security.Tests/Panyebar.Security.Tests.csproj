@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Panyebar.Application\Panyebar.Application.csproj" />
     <ProjectReference Include="..\..\src\Panyebar.Infrastructure\Panyebar.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Panyebar.Api\Panyebar.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
