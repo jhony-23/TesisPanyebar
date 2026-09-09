@@ -123,6 +123,26 @@ public sealed class ObligacionServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_OrdersByGenerationDateDescendingThenIdDescending()
+    {
+        await using var context = CreateContext();
+        var setup = AddReferences(context, PeriodicidadCuota.Anual, 30m);
+        var oldest = Obligation(setup, "2024", EstadoObligacion.Pendiente, null);
+        var newestFirst = Obligation(setup, "2025", EstadoObligacion.Pendiente, null);
+        var newestSecond = Obligation(setup, "2026", EstadoObligacion.Pendiente, null);
+        oldest.FechaGeneracion = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        newestFirst.FechaGeneracion = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+        newestSecond.FechaGeneracion = newestFirst.FechaGeneracion;
+        context.Obligaciones.AddRange(oldest, newestFirst, newestSecond);
+        await context.SaveChangesAsync();
+        var service = new ObligacionService(context);
+
+        var result = await service.GetAllAsync();
+
+        Assert.Equal(new[] { newestSecond.Id, newestFirst.Id, oldest.Id }, result.Select(o => o.Id));
+    }
+
+    [Fact]
     public async Task AnnulAsync_ChangesOnlyPendingStatePersistsReasonAndDoesNotDelete()
     {
         await using var context = CreateContext();

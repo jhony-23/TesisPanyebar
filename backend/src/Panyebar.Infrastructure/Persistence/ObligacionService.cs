@@ -19,9 +19,12 @@ public sealed class ObligacionService : IObligacionService
     public async Task<IReadOnlyList<ObligacionDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        return await ProjectDtos(now)
+        var query = _dbContext.Obligaciones
+            .AsNoTracking()
             .OrderByDescending(o => o.FechaGeneracion)
-            .ThenByDescending(o => o.Id)
+            .ThenByDescending(o => o.Id);
+
+        return await ProjectDtos(query, now)
             .ToListAsync(cancellationToken);
     }
 
@@ -167,25 +170,26 @@ public sealed class ObligacionService : IObligacionService
         return ObligacionOperationResult<ObligacionDto>.Success(ToDto(obligation, now));
     }
 
-    private IQueryable<ObligacionDto> ProjectDtos(DateTime now)
+    private IQueryable<ObligacionDto> ProjectDtos(DateTime now) =>
+        ProjectDtos(_dbContext.Obligaciones.AsNoTracking(), now);
+
+    private static IQueryable<ObligacionDto> ProjectDtos(IQueryable<Obligacion> query, DateTime now)
     {
-        return _dbContext.Obligaciones
-            .AsNoTracking()
-            .Select(o => new ObligacionDto(
-                o.Id,
-                o.PersonaId,
-                o.SuministroId,
-                o.CuotaId,
-                o.Origen,
-                o.Concepto,
-                o.Monto,
-                o.Periodo,
-                o.FechaGeneracion,
-                o.FechaVencimiento,
-                o.Estado,
-                o.Estado == EstadoObligacion.Pendiente &&
-                o.FechaVencimiento.HasValue &&
-                now > o.FechaVencimiento.Value));
+        return query.Select(o => new ObligacionDto(
+            o.Id,
+            o.PersonaId,
+            o.SuministroId,
+            o.CuotaId,
+            o.Origen,
+            o.Concepto,
+            o.Monto,
+            o.Periodo,
+            o.FechaGeneracion,
+            o.FechaVencimiento,
+            o.Estado,
+            o.Estado == EstadoObligacion.Pendiente &&
+            o.FechaVencimiento.HasValue &&
+            now > o.FechaVencimiento.Value));
     }
 
     private Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken)
