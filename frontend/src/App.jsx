@@ -7,7 +7,9 @@ import AdminPage from './pages/AdminPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
+import ObligacionesPage from './pages/ObligacionesPage.jsx'
 import PersonasPage from './pages/PersonasPage.jsx'
+import CuotasPage from './pages/CuotasPage.jsx'
 import SectoresPage from './pages/SectoresPage.jsx'
 import SolicitudesNuevoServicioPage from './pages/SolicitudesNuevoServicioPage.jsx'
 import SuministrosPage from './pages/SuministrosPage.jsx'
@@ -30,6 +32,8 @@ function App() {
               <Route element={<SectoresPage />} path="/admin/sectores" />
               <Route element={<SuministrosPage />} path="/admin/suministros" />
               <Route element={<SolicitudesNuevoServicioPage />} path="/admin/solicitudes" />
+              <Route element={<CuotasPage />} path="/admin/cuotas" />
+              <Route element={<ObligacionesPage />} path="/admin/obligaciones" />
             </Route>
           </Route>
           <Route element={<NotFoundPage />} path="*" />
