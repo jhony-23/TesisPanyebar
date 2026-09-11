@@ -10,7 +10,7 @@ const navigation = [
   { label: 'Solicitudes', path: '/admin/solicitudes', available: true, icon: 'inbox' },
   { label: 'Cuotas', path: '/admin/cuotas', available: true, icon: 'coins' },
   { label: 'Obligaciones', path: '/admin/obligaciones', available: true, icon: 'document' },
-  { label: 'Jornadas', available: false, icon: 'calendar' },
+  { label: 'Jornadas', path: '/admin/jornadas', available: true, icon: 'calendar' },
   { label: 'Pagos', available: false, icon: 'card' },
   { label: 'Finanzas', available: false, icon: 'chart' },
   { label: 'Reportes', available: false, icon: 'report' },
