@@ -723,4 +723,3 @@ public sealed class JornadaService : IJornadaService
         JornadaOperationError error) =>
         JornadaOperationResult<JornadaDetalleDto>.Failure(error);
 }
-
