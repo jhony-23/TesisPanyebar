@@ -11,15 +11,27 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<ObligacionJornada> builder)
         {
-            // Relación 9: ParticipacionJornada → ObligacionJornada (1 : N)
-            // Se configura desde ParticipacionJornadaConfiguration
+            // Una participación puede originar como máximo una obligación.
+            builder
+                .HasOne(oj => oj.ParticipacionJornada)
+                .WithOne()
+                .HasForeignKey<ObligacionJornada>(oj => oj.ParticipacionJornadaId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            // Relación 10: Obligacion → ObligacionJornada (1 : N)
-            // Se configura desde ObligacionConfiguration
+            // Una obligación puede corresponder como máximo a una participación.
+            builder
+                .HasOne(oj => oj.Obligacion)
+                .WithOne()
+                .HasForeignKey<ObligacionJornada>(oj => oj.ObligacionId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            // Restricción 5: Una sola asociación entre participación y obligación
-            builder.HasIndex(oj => new { oj.ParticipacionJornadaId, oj.ObligacionId })
-                .IsUnique();
+            builder.HasIndex(oj => oj.ParticipacionJornadaId)
+                .IsUnique()
+                .HasDatabaseName("IX_ObligacionesJornada_ParticipacionJornadaId");
+
+            builder.HasIndex(oj => oj.ObligacionId)
+                .IsUnique()
+                .HasDatabaseName("IX_ObligacionesJornada_ObligacionId");
         }
     }
 }

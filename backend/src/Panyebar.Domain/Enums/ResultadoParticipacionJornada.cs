@@ -5,7 +5,9 @@ namespace Panyebar.Domain.Enums
     /// </summary>
     public enum ResultadoParticipacionJornada
     {
+        Pendiente = 0,
         Participacion = 1,
-        Ausencia = 2
+        Ausencia = 2,
+        AusenciaJustificada = 3
     }
 }

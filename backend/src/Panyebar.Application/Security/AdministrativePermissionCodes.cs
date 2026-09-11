@@ -18,4 +18,6 @@ public static class AdministrativePermissionCodes
     public const string CuotasGestionar = "CUOTAS.GESTIONAR";
     public const string ObligacionesVer = "OBLIGACIONES.VER";
     public const string ObligacionesGestionar = "OBLIGACIONES.GESTIONAR";
+    public const string JornadasVer = "JORNADAS.VER";
+    public const string JornadasGestionar = "JORNADAS.GESTIONAR";
 }

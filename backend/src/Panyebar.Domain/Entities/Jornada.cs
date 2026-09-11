@@ -10,11 +10,16 @@ namespace Panyebar.Domain.Entities
     {
         public int Id { get; set; }
 
-        public DateTime Fecha { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string? Descripcion { get; set; }
 
-        public string Descripcion { get; set; } = string.Empty;
+        public DateTime Fecha { get; set; }
+        public TimeOnly? HoraInicio { get; set; }
+        public TimeOnly? HoraFin { get; set; }
+
+        public string? Ubicacion { get; set; }
         public decimal? MontoIncumplimiento { get; set; }
 
-        public EstadoRegistro Estado { get; set; } = EstadoRegistro.Activo;
+        public EstadoJornada Estado { get; set; } = EstadoJornada.Planificada;
     }
 }

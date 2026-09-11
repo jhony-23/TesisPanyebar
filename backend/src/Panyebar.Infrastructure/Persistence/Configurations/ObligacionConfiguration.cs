@@ -27,13 +27,6 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
                 .HasMaxLength(20)
                 .IsRequired(false);
 
-            // Relación 10: Obligacion → ObligacionJornada (1 : N)
-            builder
-                .HasMany<ObligacionJornada>()
-                .WithOne(oj => oj.Obligacion)
-                .HasForeignKey(oj => oj.ObligacionId)
-                .OnDelete(DeleteBehavior.Restrict);
-
             // Relación 12: Obligacion → AplicacionPago (1 : N)
             builder
                 .HasMany<AplicacionPago>()

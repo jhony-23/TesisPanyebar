@@ -12,7 +12,7 @@ namespace Panyebar.Domain.Entities
         public int JornadaId { get; set; }
         public int PersonaId { get; set; }
 
-        public ResultadoParticipacionJornada Resultado { get; set; }
+        public ResultadoParticipacionJornada Resultado { get; set; } = ResultadoParticipacionJornada.Pendiente;
         public string? Observacion { get; set; }
 
         public Jornada? Jornada { get; set; }
