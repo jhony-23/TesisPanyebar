@@ -11,15 +11,20 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<AplicacionPago> builder)
         {
-            // Relación 11: Pago → AplicacionPago (1 : N)
-            // Se configura desde PagoConfiguration
+            // Las relaciones con Pago y Obligacion se configuran desde
+            // PagoConfiguration y ObligacionConfiguration, respectivamente.
 
-            // Relación 12: Obligacion → AplicacionPago (1 : N)
-            // Se configura desde ObligacionConfiguration
+            // Una obligación completa solo puede quedar asociada a un pago.
+            // Esta protección de persistencia complementa la validación funcional
+            // y evita una segunda aplicación incluso ante concurrencia.
+            builder.HasIndex(ap => ap.ObligacionId)
+                .IsUnique()
+                .HasDatabaseName("IX_AplicacionesPago_ObligacionId");
 
-            // Restricción 6: Una sola asociación entre pago y obligación
+            // Se conserva además la unicidad explícita de la asociación.
             builder.HasIndex(ap => new { ap.PagoId, ap.ObligacionId })
-                .IsUnique();
+                .IsUnique()
+                .HasDatabaseName("IX_AplicacionesPago_PagoId_ObligacionId");
         }
     }
 }
