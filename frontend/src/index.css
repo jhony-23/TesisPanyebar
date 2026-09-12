@@ -6,3 +6,54 @@ body {
 	background: #f5f7f6;
 	font-family: "Segoe UI", sans-serif;
 }
+#payment-print-root {
+  display: none;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  #root {
+    display: none !important;
+  }
+
+  #payment-print-root {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  #payment-print-root .payment-receipt {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  #payment-print-root .payment-receipt-print > div:first-child {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #payment-print-root .payment-receipt-print [class*="grid-cols-[1fr_130px_130px]"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  #payment-print-root .receipt-actions {
+    display: none !important;
+  }
+
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+}

@@ -11,7 +11,7 @@ const navigation = [
   { label: 'Cuotas', path: '/admin/cuotas', available: true, icon: 'coins' },
   { label: 'Obligaciones', path: '/admin/obligaciones', available: true, icon: 'document' },
   { label: 'Jornadas', path: '/admin/jornadas', available: true, icon: 'calendar' },
-  { label: 'Pagos', available: false, icon: 'card' },
+  { label: 'Pagos', path: '/admin/pagos', available: true, icon: 'card' },
   { label: 'Finanzas', available: false, icon: 'chart' },
   { label: 'Reportes', available: false, icon: 'report' },
   { label: 'Abastecimiento', available: false, icon: 'truck' },

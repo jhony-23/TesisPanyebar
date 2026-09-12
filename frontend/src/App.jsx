@@ -8,6 +8,7 @@ import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 import ObligacionesPage from './pages/ObligacionesPage.jsx'
+import PagosPage from './pages/PagosPage.jsx'
 import JornadasPage from './pages/JornadasPage.jsx'
 import PersonasPage from './pages/PersonasPage.jsx'
 import CuotasPage from './pages/CuotasPage.jsx'
@@ -35,6 +36,7 @@ function App() {
               <Route element={<SolicitudesNuevoServicioPage />} path="/admin/solicitudes" />
               <Route element={<CuotasPage />} path="/admin/cuotas" />
               <Route element={<ObligacionesPage />} path="/admin/obligaciones" />
+              <Route element={<PagosPage />} path="/admin/pagos" />
               <Route element={<JornadasPage />} path="/admin/jornadas" />
             </Route>
           </Route>
