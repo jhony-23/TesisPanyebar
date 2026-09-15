@@ -49,6 +49,7 @@ namespace Panyebar.Infrastructure.Persistence
 
             // Aplicar todas las configuraciones de relaciones desde el ensamblado
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(PanyebarDbContext).Assembly);
+            modelBuilder.ConfigureUtcDateTimes();
         }
     }
 }

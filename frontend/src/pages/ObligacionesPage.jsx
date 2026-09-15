@@ -7,6 +7,7 @@ import Panel from '../components/ui/Panel.jsx'
 import { getCuotas } from '../services/cuotaService.js'
 import { annulObligacion, generateObligacionFromCuota, getObligaciones } from '../services/obligacionService.js'
 import { getSuministros } from '../services/suministroService.js'
+import { formatCivilDate, formatGuatemalaDateTime } from '../utils/dateTime.js'
 
 const initialForm = { cuotaId: '', suministroId: '', periodo: '', fechaVencimiento: '' }
 
@@ -190,11 +191,11 @@ function ObligationList({ cuotaById, isSaving, obligaciones, onAnnul, supplyById
 }
 
 function ObligationRow({ cuota, isSaving, obligation, onAnnul, supply }) {
-  return <tr><td className="max-w-52 py-4 pr-4"><p className="font-semibold text-slate-900">{obligation.concepto}</p><p className="mt-1 text-xs text-slate-500">{cuota ? `Cuota: ${cuota.nombre}` : `Cuota #${obligation.cuotaId ?? '—'}`}</p></td><td className="py-4 pr-4 text-slate-600">{holderLabel(obligation, supply)}</td><td className="py-4 pr-4 font-medium text-slate-700">{obligation.periodo || '—'}</td><td className="whitespace-nowrap py-4 pr-4 font-semibold text-slate-700">{formatMoney(obligation.monto)}</td><td className="py-4 pr-4 text-xs leading-5 text-slate-600"><span className="block">Generada: {formatDateTime(obligation.fechaGeneracion)}</span><span className="block">Vence: {formatDate(obligation.fechaVencimiento)}</span></td><td className="py-4 pr-4"><Situation obligation={obligation} /></td><td className="py-4 text-right"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></td></tr>
+  return <tr><td className="max-w-52 py-4 pr-4"><p className="font-semibold text-slate-900">{obligation.concepto}</p><p className="mt-1 text-xs text-slate-500">{cuota ? `Cuota: ${cuota.nombre}` : `Cuota #${obligation.cuotaId ?? '—'}`}</p></td><td className="py-4 pr-4 text-slate-600">{holderLabel(obligation, supply)}</td><td className="py-4 pr-4 font-medium text-slate-700">{obligation.periodo || '—'}</td><td className="whitespace-nowrap py-4 pr-4 font-semibold text-slate-700">{formatMoney(obligation.monto)}</td><td className="py-4 pr-4 text-xs leading-5 text-slate-600"><span className="block">Generada: {formatGuatemalaDateTime(obligation.fechaGeneracion)}</span><span className="block">Vence: {formatCivilDate(obligation.fechaVencimiento, 'Sin vencimiento')}</span></td><td className="py-4 pr-4"><Situation obligation={obligation} /></td><td className="py-4 text-right"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></td></tr>
 }
 
 function ObligationCard({ cuota, isSaving, obligation, onAnnul, supply }) {
-  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{obligation.concepto}</h3><p className="mt-1 text-sm text-slate-500">{holderLabel(obligation, supply)}</p></div><Situation obligation={obligation} /></div><dl className="mt-4 grid grid-cols-2 gap-3 rounded-md bg-slate-50 p-3 text-sm"><Data label="Monto" value={formatMoney(obligation.monto)} strong /><Data label="Período" value={obligation.periodo || '—'} /><Data label="Cuota" value={cuota?.nombre || `#${obligation.cuotaId ?? '—'}`} /><Data label="Generación" value={formatDateTime(obligation.fechaGeneracion)} /><Data label="Vencimiento" value={formatDate(obligation.fechaVencimiento)} /></dl><div className="mt-4 border-t border-slate-100 pt-3"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></div></article>
+  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{obligation.concepto}</h3><p className="mt-1 text-sm text-slate-500">{holderLabel(obligation, supply)}</p></div><Situation obligation={obligation} /></div><dl className="mt-4 grid grid-cols-2 gap-3 rounded-md bg-slate-50 p-3 text-sm"><Data label="Monto" value={formatMoney(obligation.monto)} strong /><Data label="Período" value={obligation.periodo || '—'} /><Data label="Cuota" value={cuota?.nombre || `#${obligation.cuotaId ?? '—'}`} /><Data label="Generación" value={formatGuatemalaDateTime(obligation.fechaGeneracion)} /><Data label="Vencimiento" value={formatCivilDate(obligation.fechaVencimiento, 'Sin vencimiento')} /></dl><div className="mt-4 border-t border-slate-100 pt-3"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></div></article>
 }
 
 function Data({ label, strong = false, value }) {
@@ -259,18 +260,6 @@ function periodicityLabel(periodicity) {
 
 function formatMoney(value) {
   return new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(value)
-}
-
-function formatDate(value) {
-  if (!value) return 'Sin vencimiento'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-GT')
-}
-
-function formatDateTime(value) {
-  if (!value) return 'Sin fecha'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-GT')
 }
 
 function getRequestMessage(error, fallback) {

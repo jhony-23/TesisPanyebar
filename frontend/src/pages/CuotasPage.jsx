@@ -5,8 +5,9 @@ import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Panel from '../components/ui/Panel.jsx'
 import { createCuota, getCuotas, setCuotaEstado, updateCuota } from '../services/cuotaService.js'
+import { formatCivilDate, guatemalaToday } from '../utils/dateTime.js'
 
-const today = new Date().toLocaleDateString('en-CA')
+const today = guatemalaToday()
 const initialForm = {
   nombre: '',
   descripcion: '',
@@ -269,14 +270,7 @@ function formatMoney(value) {
 }
 
 function formatValidity(cuota) {
-  return `${formatDate(cuota.fechaInicioVigencia)} — ${cuota.fechaFinVigencia ? formatDate(cuota.fechaFinVigencia) : 'Sin fecha de fin'}`
-}
-
-function formatDate(value) {
-  if (!value) return 'Sin fecha'
-  const datePart = String(value).slice(0, 10)
-  const [year, month, day] = datePart.split('-')
-  return year && month && day ? `${day}/${month}/${year}` : value
+  return `${formatCivilDate(cuota.fechaInicioVigencia)} — ${formatCivilDate(cuota.fechaFinVigencia, 'Sin fecha de fin')}`
 }
 
 function dateInputValue(value) {

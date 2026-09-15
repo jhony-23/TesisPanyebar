@@ -16,6 +16,7 @@ import {
   updateJornadaParticipant,
 } from '../services/jornadaService.js'
 import { getPersonas } from '../services/personaService.js'
+import { formatCivilDate, formatCivilTime } from '../utils/dateTime.js'
 
 const initialForm = {
   nombre: '',
@@ -547,7 +548,7 @@ function JornadaList({ jornadas, onEdit, onOpen }) {
                   <p className="font-semibold text-slate-900">{jornada.nombre}</p>
                   <p className="mt-1 text-xs text-slate-500">{jornada.ubicacion || 'Sin ubicación'}</p>
                 </td>
-                <td className="py-4 pr-4 text-slate-600">{formatDate(jornada.fecha)}</td>
+                <td className="py-4 pr-4 text-slate-600">{formatCivilDate(jornada.fecha)}</td>
                 <td className="py-4 pr-4 text-slate-700">
                   {jornada.montoIncumplimiento == null ? 'Sin penalización' : formatMoney(jornada.montoIncumplimiento)}
                 </td>
@@ -571,7 +572,7 @@ function JornadaList({ jornadas, onEdit, onOpen }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-slate-900">{jornada.nombre}</h3>
-                <p className="mt-1 text-sm text-slate-500">{formatDate(jornada.fecha)}</p>
+                <p className="mt-1 text-sm text-slate-500">{formatCivilDate(jornada.fecha)}</p>
               </div>
               <JornadaStatus estado={jornada.estado} />
             </div>
@@ -619,9 +620,9 @@ function JornadaDetail({
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-600">{jornada.descripcion || 'Sin descripción.'}</p>
           <p className="mt-2 text-xs text-slate-500">
-            {formatDate(jornada.fecha)}
-            {jornada.horaInicio ? ` · ${formatTime(jornada.horaInicio)}` : ''}
-            {jornada.horaFin ? `–${formatTime(jornada.horaFin)}` : ''}
+            {formatCivilDate(jornada.fecha)}
+            {jornada.horaInicio ? ` · ${formatCivilTime(jornada.horaInicio)}` : ''}
+            {jornada.horaFin ? `–${formatCivilTime(jornada.horaFin)}` : ''}
             {jornada.ubicacion ? ` · ${jornada.ubicacion}` : ''}
           </p>
         </div>
@@ -920,17 +921,6 @@ const secondaryButton = 'rounded-md border border-slate-300 px-3 py-2 text-xs fo
 
 function formatMoney(value) {
   return new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(value)
-}
-
-function formatDate(value) {
-  if (!value) return 'Sin fecha'
-  const datePart = String(value).slice(0, 10)
-  const [year, month, day] = datePart.split('-')
-  return year && month && day ? `${day}/${month}/${year}` : value
-}
-
-function formatTime(value) {
-  return value ? String(value).slice(0, 5) : ''
 }
 
 function dateInputValue(value) {

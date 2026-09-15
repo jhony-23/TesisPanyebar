@@ -14,6 +14,7 @@ import {
 } from '../services/pagoService.js'
 import { getPersonas } from '../services/personaService.js'
 import { getSuministros } from '../services/suministroService.js'
+import { formatCivilDate, formatGuatemalaDateTime } from '../utils/dateTime.js'
 
 const initialForm = {
   holderKey: '',
@@ -647,9 +648,9 @@ function PaymentForm({
                               : ''}
                           </p>
                           <p className="mt-1 text-xs text-slate-500">
-                            Generada {formatDate(obligation.fechaGeneracion)}
+                            Generada {formatGuatemalaDateTime(obligation.fechaGeneracion)}
                             {obligation.fechaVencimiento
-                              ? ` · Vence ${formatDate(obligation.fechaVencimiento)}`
+                              ? ` · Vence ${formatCivilDate(obligation.fechaVencimiento)}`
                               : ''}
                           </p>
                         </div>
@@ -836,7 +837,7 @@ function PaymentList({ onOpen, pagos }) {
                 </td>
 
                 <td className="py-4 pr-4 text-slate-600">
-                  {formatDateTime(payment.fecha)}
+                  {formatGuatemalaDateTime(payment.fecha)}
                 </td>
 
                 <td className="py-4 pr-4">
@@ -878,7 +879,7 @@ function PaymentList({ onOpen, pagos }) {
                   {payment.numeroComprobante}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  {formatDateTime(payment.fecha)}
+                  {formatGuatemalaDateTime(payment.fecha)}
                 </p>
               </div>
 
@@ -934,7 +935,7 @@ function PaymentDetail({ payment, receipt }) {
           </p>
 
           <p className="mt-2 text-xs text-slate-500">
-            Registrado {formatDateTime(payment.fecha)}
+            Registrado {formatGuatemalaDateTime(payment.fecha)}
           </p>
         </div>
 
@@ -1097,7 +1098,7 @@ function ReceiptContent({
         <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2">
           <ReceiptData
             label="Fecha"
-            value={formatDateTime(receipt.fecha)}
+            value={formatGuatemalaDateTime(receipt.fecha)}
           />
           <ReceiptData
             label="Registrado por"
@@ -1493,27 +1494,6 @@ function formatMoney(value) {
     style: 'currency',
     currency: 'GTQ',
   }).format(Number(value || 0))
-}
-
-function formatDate(value) {
-  if (!value) return 'Sin fecha'
-
-  const datePart = String(value).slice(0, 10)
-  const [year, month, day] = datePart.split('-')
-
-  return year && month && day
-    ? `${day}/${month}/${year}`
-    : value
-}
-
-function formatDateTime(value) {
-  if (!value) return 'Sin fecha'
-
-  const date = new Date(value)
-
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString('es-GT')
 }
 
 function getRequestMessage(error, fallback) {

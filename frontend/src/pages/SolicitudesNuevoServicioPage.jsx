@@ -12,6 +12,7 @@ import {
   getSolicitudesNuevoServicio,
   rejectSolicitudNuevoServicio,
 } from '../services/solicitudNuevoServicioService.js'
+import { formatGuatemalaDateTime } from '../utils/dateTime.js'
 
 const initialForm = {
   personaSolicitanteId: '',
@@ -175,15 +176,15 @@ function RequestList({ isSaving, onResolve, solicitudes }) {
 }
 
 function RequestRow({ isSaving, onResolve, request }) {
-  return <tr><td className="py-4 pr-4 font-semibold text-slate-900">{request.personaSolicitante}</td><td className="py-4 pr-4 text-slate-600">{request.sectorNombre}</td><td className="max-w-48 py-4 pr-4 text-slate-600">{request.direccionReferencia}</td><td className="py-4 pr-4 text-slate-600">{formatDate(request.fechaSolicitud)}</td><td className="py-4 pr-4"><RequestStatusBadge estado={request.estado} /></td><td className="py-4 pr-4 text-slate-600">{request.nis || '—'}</td><td className="py-4 text-right"><RequestActions isSaving={isSaving} onResolve={onResolve} request={request} /></td></tr>
+  return <tr><td className="py-4 pr-4 font-semibold text-slate-900">{request.personaSolicitante}</td><td className="py-4 pr-4 text-slate-600">{request.sectorNombre}</td><td className="max-w-48 py-4 pr-4 text-slate-600">{request.direccionReferencia}</td><td className="py-4 pr-4 text-slate-600">{formatGuatemalaDateTime(request.fechaSolicitud)}</td><td className="py-4 pr-4"><RequestStatusBadge estado={request.estado} /></td><td className="py-4 pr-4 text-slate-600">{request.nis || '—'}</td><td className="py-4 text-right"><RequestActions isSaving={isSaving} onResolve={onResolve} request={request} /></td></tr>
 }
 
 function RequestCard({ isSaving, onResolve, request }) {
-  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{request.personaSolicitante}</h3><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Sector: </dt><dd className="inline">{request.sectorNombre}</dd></div><div><dt className="inline font-medium text-slate-500">Dirección: </dt><dd className="inline">{request.direccionReferencia}</dd></div><div><dt className="inline font-medium text-slate-500">Fecha: </dt><dd className="inline">{formatDate(request.fechaSolicitud)}</dd></div><div><dt className="inline font-medium text-slate-500">Suministro: </dt><dd className="inline">{request.nis || '—'}</dd></div></dl></div><RequestStatusBadge estado={request.estado} /></div><div className="mt-4 border-t border-slate-100 pt-3"><RequestActions isSaving={isSaving} onResolve={onResolve} request={request} /></div></article>
+  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{request.personaSolicitante}</h3><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Sector: </dt><dd className="inline">{request.sectorNombre}</dd></div><div><dt className="inline font-medium text-slate-500">Dirección: </dt><dd className="inline">{request.direccionReferencia}</dd></div><div><dt className="inline font-medium text-slate-500">Fecha: </dt><dd className="inline">{formatGuatemalaDateTime(request.fechaSolicitud)}</dd></div><div><dt className="inline font-medium text-slate-500">Suministro: </dt><dd className="inline">{request.nis || '—'}</dd></div></dl></div><RequestStatusBadge estado={request.estado} /></div><div className="mt-4 border-t border-slate-100 pt-3"><RequestActions isSaving={isSaving} onResolve={onResolve} request={request} /></div></article>
 }
 
 function RequestActions({ isSaving, onResolve, request }) {
-  if (request.estado !== 1) return <p className="text-right text-xs text-slate-500">Resuelta el {formatDate(request.fechaResolucion)} por {request.usuarioResolucion || 'usuario administrativo'}</p>
+  if (request.estado !== 1) return <p className="text-right text-xs text-slate-500">Resuelta el {formatGuatemalaDateTime(request.fechaResolucion)} por {request.usuarioResolucion || 'usuario administrativo'}</p>
   return <div className="flex flex-wrap justify-end gap-2"><button className="rounded-md border border-[#28727a]/40 px-3 py-1.5 text-xs font-semibold text-[#1c5961] hover:bg-[#eef6f5] disabled:opacity-60" disabled={isSaving} onClick={() => onResolve({ action: 'approve', request })} type="button">Aprobar</button><button className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60" disabled={isSaving} onClick={() => onResolve({ action: 'reject', request })} type="button">Rechazar</button></div>
 }
 
@@ -216,12 +217,6 @@ function ResolutionDialog({ action, isSaving, onCancel, onConfirm, request }) {
 
 function Alert({ message, onDismiss }) {
   return <div aria-live="polite" className="flex items-start justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><span>{message}</span>{onDismiss && <button aria-label="Cerrar mensaje" className="shrink-0 font-semibold text-red-700" onClick={onDismiss} type="button">Cerrar</button>}</div>
-}
-
-function formatDate(value) {
-  if (!value) return 'Sin fecha'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-GT')
 }
 
 function getRequestMessage(error, fallback) {
