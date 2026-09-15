@@ -14,7 +14,14 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendDevelopment", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        var publicWebBaseUrl = builder.Configuration["PublicWeb:BaseUrl"]?.Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(publicWebBaseUrl))
+        {
+            throw new InvalidOperationException(
+                "La configuración PublicWeb:BaseUrl es requerida en desarrollo.");
+        }
+
+        policy.WithOrigins(publicWebBaseUrl)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });

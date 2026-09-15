@@ -15,6 +15,7 @@ import CuotasPage from './pages/CuotasPage.jsx'
 import SectoresPage from './pages/SectoresPage.jsx'
 import SolicitudesNuevoServicioPage from './pages/SolicitudesNuevoServicioPage.jsx'
 import SuministrosPage from './pages/SuministrosPage.jsx'
+import SuministroQrPage from './pages/SuministroQrPage.jsx'
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Routes>
           <Route element={<PublicLayout />}>
             <Route element={<HomePage />} path="/" />
+            <Route element={<SuministroQrPage />} path="/suministro/qr/:token" />
             <Route element={<PublicOnlyRoute />}>
               <Route element={<LoginPage />} path="/login" />
             </Route>

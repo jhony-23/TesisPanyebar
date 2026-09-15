@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Panyebar.Application.Suministros;
 using Panyebar.Domain.Entities;
 using Panyebar.Domain.Enums;
@@ -272,7 +273,7 @@ public class SuministroServiceTests
     }
 
     [Fact]
-    public async Task GetQrAsync_ReturnsRelativeValueWithoutExposingTokenSeparately()
+    public async Task GetQrAsync_ReturnsConfiguredWebUrlWithoutExposingTokenSeparately()
     {
         await using var dbContext = CreateContext();
         dbContext.Suministros.Add(new Suministro
@@ -291,7 +292,7 @@ public class SuministroServiceTests
         Assert.NotNull(result);
         Assert.Equal(10, result!.SuministroId);
         Assert.Equal("PAN-000010", result.Nis);
-        Assert.Equal("/api/suministros/qr/token-qr-original", result.QrValue);
+        Assert.Equal("https://agua.example.test/suministro/qr/token-qr-original", result.QrValue);
         Assert.DoesNotContain(result.Nis, result.QrValue);
         Assert.Equal("token-qr-original", await dbContext.Suministros.Select(s => s.CodigoQrToken).SingleAsync());
     }
@@ -319,6 +320,39 @@ public class SuministroServiceTests
         Assert.Equal(10, result!.Id);
         Assert.Equal("PAN-000010", result.Nis);
         Assert.Null(missing);
+    }
+
+    [Fact]
+    public async Task GetPublicByQrTokenAsync_ReturnsOnlyMinimumPublicSupplyData()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Panyebar Centro", Estado = EstadoRegistro.Activo });
+        dbContext.Suministros.Add(new Suministro
+        {
+            Id = 10,
+            SectorId = 1,
+            Nis = "PAN-000010",
+            CodigoQrToken = "token-qr-original",
+            DireccionReferencia = "Dato privado",
+            Estado = EstadoSuministro.Activo
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, "PAN-000011", "token-2");
+
+        var result = await service.GetPublicByQrTokenAsync(" token-qr-original ");
+        var missing = await service.GetPublicByQrTokenAsync("missing-token");
+        var malformed = await service.GetPublicByQrTokenAsync("not/url-safe");
+
+        Assert.NotNull(result);
+        Assert.Equal("PAN-000010", result!.Nis);
+        Assert.Equal("Panyebar Centro", result.SectorNombre);
+        Assert.Equal(EstadoSuministro.Activo, result.Estado);
+        Assert.Null(missing);
+        Assert.Null(malformed);
+        Assert.Equal(
+            new[] { nameof(SuministroQrPublicDto.Estado), nameof(SuministroQrPublicDto.Nis), nameof(SuministroQrPublicDto.SectorNombre) },
+            typeof(SuministroQrPublicDto).GetProperties().Select(property => property.Name).OrderBy(name => name));
     }
 
     [Fact]
@@ -470,7 +504,11 @@ public class SuministroServiceTests
         return new SuministroService(
             dbContext,
             new FixedNisGenerator(nis),
-            new FixedQrTokenGenerator(token));
+            new FixedQrTokenGenerator(token),
+            Options.Create(new SuministroQrOptions
+            {
+                BaseUrl = "https://agua.example.test"
+            }));
     }
 
     private sealed class FixedNisGenerator : ISuministroNisGenerator

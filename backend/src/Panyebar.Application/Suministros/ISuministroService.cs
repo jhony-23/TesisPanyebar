@@ -9,6 +9,7 @@ public interface ISuministroService
     Task<SuministroDto?> GetByNisAsync(string nis, CancellationToken cancellationToken = default);
     Task<SuministroQrDto?> GetQrAsync(int suministroId, CancellationToken cancellationToken = default);
     Task<SuministroDto?> GetByQrTokenAsync(string token, CancellationToken cancellationToken = default);
+    Task<SuministroQrPublicDto?> GetPublicByQrTokenAsync(string token, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ResponsableHistorialDto>?> GetResponsablesAsync(int suministroId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProcesoSuministroDto>?> GetProcesosAsync(int suministroId, CancellationToken cancellationToken = default);
     Task<SuministroOperationResult<SuministroDto>> CreateAsync(SuministroInput input, CancellationToken cancellationToken = default);
@@ -31,6 +32,11 @@ public sealed record SuministroQrDto(
     int SuministroId,
     string Nis,
     string QrValue);
+
+public sealed record SuministroQrPublicDto(
+    string Nis,
+    string SectorNombre,
+    EstadoSuministro Estado);
 
 public sealed record ResponsableActualDto(
     int PersonaId,

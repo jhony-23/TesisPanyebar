@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Options;
 using Panyebar.Application.Suministros;
 using Panyebar.Domain.Entities;
 using Panyebar.Domain.Enums;
@@ -11,15 +12,18 @@ public sealed class SuministroService : ISuministroService
     private readonly PanyebarDbContext _dbContext;
     private readonly ISuministroNisGenerator _nisGenerator;
     private readonly ISuministroQrTokenGenerator _qrTokenGenerator;
+    private readonly SuministroQrOptions _qrOptions;
 
     public SuministroService(
         PanyebarDbContext dbContext,
         ISuministroNisGenerator nisGenerator,
-        ISuministroQrTokenGenerator qrTokenGenerator)
+        ISuministroQrTokenGenerator qrTokenGenerator,
+        IOptions<SuministroQrOptions> qrOptions)
     {
         _dbContext = dbContext;
         _nisGenerator = nisGenerator;
         _qrTokenGenerator = qrTokenGenerator;
+        _qrOptions = qrOptions.Value;
     }
 
     public async Task<IReadOnlyList<SuministroDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -60,21 +64,28 @@ public sealed class SuministroService : ISuministroService
         int suministroId,
         CancellationToken cancellationToken = default)
     {
-        return await _dbContext.Suministros
+        var supply = await _dbContext.Suministros
             .AsNoTracking()
             .Where(s => s.Id == suministroId)
-            .Select(s => new SuministroQrDto(
-                s.Id,
-                s.Nis,
-                $"/api/suministros/qr/{s.CodigoQrToken}"))
+            .Select(s => new { s.Id, s.Nis, s.CodigoQrToken })
             .SingleOrDefaultAsync(cancellationToken);
+
+        if (supply is null)
+        {
+            return null;
+        }
+
+        var baseUrl = GetPublicWebBaseUrl();
+        var qrValue = new Uri(baseUrl, $"/suministro/qr/{Uri.EscapeDataString(supply.CodigoQrToken)}");
+
+        return new SuministroQrDto(supply.Id, supply.Nis, qrValue.AbsoluteUri);
     }
 
     public Task<SuministroDto?> GetByQrTokenAsync(
         string token,
         CancellationToken cancellationToken = default)
     {
-        var normalizedToken = string.IsNullOrWhiteSpace(token) ? null : token.Trim();
+        var normalizedToken = NormalizeQrToken(token);
         if (normalizedToken is null)
         {
             return Task.FromResult<SuministroDto?>(null);
@@ -84,6 +95,28 @@ public sealed class SuministroService : ISuministroService
             .Where(s => s.CodigoQrToken == normalizedToken);
 
         return ProjectDto(query)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<SuministroQrPublicDto?> GetPublicByQrTokenAsync(
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedToken = NormalizeQrToken(token);
+        if (normalizedToken is null)
+        {
+            return Task.FromResult<SuministroQrPublicDto?>(null);
+        }
+
+        return (
+            from supply in _dbContext.Suministros.AsNoTracking()
+            join sector in _dbContext.Sectores.AsNoTracking()
+                on supply.SectorId equals sector.Id
+            where supply.CodigoQrToken == normalizedToken
+            select new SuministroQrPublicDto(
+                supply.Nis,
+                sector.Nombre,
+                supply.Estado))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -529,6 +562,33 @@ public sealed class SuministroService : ISuministroService
         }
 
         return (motivo, observacion);
+    }
+
+    private Uri GetPublicWebBaseUrl()
+    {
+        var configuredBaseUrl = _qrOptions.BaseUrl?.Trim();
+        if (!Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var baseUrl) ||
+            (baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                "La configuración PublicWeb:BaseUrl debe contener una URL HTTP(S) absoluta.");
+        }
+
+        return new Uri(baseUrl.AbsoluteUri.TrimEnd('/') + "/", UriKind.Absolute);
+    }
+
+    private static string? NormalizeQrToken(string token)
+    {
+        var normalizedToken = string.IsNullOrWhiteSpace(token) ? null : token.Trim();
+        if (normalizedToken is null ||
+            normalizedToken.Length > 128 ||
+            normalizedToken.Any(character =>
+                !char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_'))
+        {
+            return null;
+        }
+
+        return normalizedToken;
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception)

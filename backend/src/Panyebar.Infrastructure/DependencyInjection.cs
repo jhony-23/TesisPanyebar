@@ -49,6 +49,9 @@ public static class DependencyInjection
         services.AddScoped<ISuministroNisGenerator, SuministroNisGenerator>();
         services.AddSingleton<ISuministroQrTokenGenerator, SuministroQrTokenGenerator>();
 
+        services.Configure<SuministroQrOptions>(
+            configuration.GetSection(SuministroQrOptions.SectionName));
+
         services.Configure<JwtTokenOptions>(configuration.GetSection(JwtTokenOptions.SectionName));
         services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 

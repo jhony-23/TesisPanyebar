@@ -64,6 +64,16 @@ public sealed class SuministrosController : ControllerBase
             : Ok(suministro);
     }
 
+    [HttpGet("public/qr/{token}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetPublicByQrToken(string token, CancellationToken cancellationToken)
+    {
+        var suministro = await _suministroService.GetPublicByQrTokenAsync(token, cancellationToken);
+        return suministro is null
+            ? NotFound(new { message = "Código QR no válido o no encontrado." })
+            : Ok(suministro);
+    }
+
     [HttpGet("{id:int}/responsables")]
     [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SuministrosVer)]
     public async Task<IActionResult> GetResponsables(int id, CancellationToken cancellationToken)
