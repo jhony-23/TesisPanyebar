@@ -17,6 +17,24 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
             // Precisión monetaria
             builder.Property(e => e.Monto)
                 .HasPrecision(18, 2);
+
+            builder.Property(e => e.Concepto)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            // Fecha civil: conserva DateTime/datetime2 sin converter UTC.
+            builder.Property(e => e.Fecha)
+                .IsRequired();
+
+            // Los enums se persisten como int por convención, igual que Pago.
+            builder.Property(e => e.Estado)
+                .IsRequired();
+
+            builder.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_Egresos_MontoPositivo", "[Monto] > 0");
+                t.HasCheckConstraint("CK_Egresos_EstadoValido", "[Estado] IN (1, 2)");
+            });
         }
     }
 }

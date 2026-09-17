@@ -23,4 +23,7 @@ public static class AdministrativePermissionCodes
 
     public const string PagosVer = "PAGOS.VER";
     public const string PagosGestionar = "PAGOS.GESTIONAR";
+
+    public const string FinanzasVer = "FINANZAS.VER";
+    public const string FinanzasGestionar = "FINANZAS.GESTIONAR";
 }

@@ -1,4 +1,5 @@
 using System;
+using Panyebar.Domain.Enums;
 
 namespace Panyebar.Domain.Entities
 {
@@ -13,8 +14,11 @@ namespace Panyebar.Domain.Entities
 
         public decimal Monto { get; set; }
 
+        // Fecha civil del gasto; no representa un instante UTC.
         public DateTime Fecha { get; set; }
 
         public int UsuarioAdministrativoId { get; set; }
+
+        public EstadoEgreso Estado { get; set; } = EstadoEgreso.Registrado;
     }
 }
