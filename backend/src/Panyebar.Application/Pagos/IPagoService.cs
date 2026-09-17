@@ -17,4 +17,9 @@ public interface IPagoService
     Task<ComprobantePagoDto?> GetComprobanteAsync(
         int id,
         CancellationToken cancellationToken = default);
+
+    Task<PagoOperationResult<PagoDetalleDto>> AnnulAsync(
+        int id,
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default);
 }

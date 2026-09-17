@@ -73,30 +73,31 @@ public sealed class PaymentsModelPersistenceTests
     }
 
     [Fact]
-    public void EfModel_AplicacionPago_ProtectsObligationFromMultiplePayments()
+    public void EfModel_AplicacionPago_AllowsHistoricalPaymentsAndProtectsSamePaymentAssociation()
     {
         using var context = CreateContext();
-        var entity = context.Model.FindEntityType(typeof(AplicacionPago));
 
-        Assert.NotNull(entity);
+        var entityType =
+            context.Model.FindEntityType(typeof(AplicacionPago));
 
-        var obligationIndex = Assert.Single(
-            entity!.GetIndexes(),
-            index =>
+        Assert.NotNull(entityType);
+
+        var obligationIndex = entityType!
+            .GetIndexes()
+            .Single(index =>
                 index.Properties.Count == 1 &&
                 index.Properties[0].Name == nameof(AplicacionPago.ObligacionId));
 
-        Assert.True(obligationIndex.IsUnique);
-        Assert.Equal("IX_AplicacionesPago_ObligacionId", obligationIndex.GetDatabaseName());
+        Assert.False(obligationIndex.IsUnique);
 
-        var associationIndex = Assert.Single(
-            entity.GetIndexes(),
-            index =>
+        var paymentObligationIndex = entityType
+            .GetIndexes()
+            .Single(index =>
                 index.Properties.Count == 2 &&
                 index.Properties[0].Name == nameof(AplicacionPago.PagoId) &&
                 index.Properties[1].Name == nameof(AplicacionPago.ObligacionId));
 
-        Assert.True(associationIndex.IsUnique);
+        Assert.True(paymentObligationIndex.IsUnique);
     }
 
     private static PanyebarDbContext CreateContext()

@@ -14,12 +14,9 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
             // Las relaciones con Pago y Obligacion se configuran desde
             // PagoConfiguration y ObligacionConfiguration, respectivamente.
 
-            // Una obligación completa solo puede quedar asociada a un pago.
-            // Esta protección de persistencia complementa la validación funcional
-            // y evita una segunda aplicación incluso ante concurrencia.
-            builder.HasIndex(ap => ap.ObligacionId)
-                .IsUnique()
-                .HasDatabaseName("IX_AplicacionesPago_ObligacionId");
+            // Una obligación puede conservar aplicaciones históricas de pagos
+            // anulados y posteriormente asociarse a un nuevo pago válido.
+            // La unicidad funcional se controla contra pagos registrados.
 
             // Se conserva además la unicidad explícita de la asociación.
             builder.HasIndex(ap => new { ap.PagoId, ap.ObligacionId })

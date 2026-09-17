@@ -7,6 +7,7 @@ import PageHeader from '../components/ui/PageHeader.jsx'
 import Panel from '../components/ui/Panel.jsx'
 import { getObligaciones } from '../services/obligacionService.js'
 import {
+  annulPayment,
   getPagoById,
   getPagoComprobante,
   getPagos,
@@ -34,6 +35,7 @@ function PagosPage() {
   const [selected, setSelected] = useState(null)
   const [receipt, setReceipt] = useState(null)
   const [pendingConfirmation, setPendingConfirmation] = useState(false)
+  const [pendingAnnulment, setPendingAnnulment] = useState(null)
   const [isRegisterOpen, setIsRegisterOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isReferencesLoading, setIsReferencesLoading] = useState(true)
@@ -351,6 +353,93 @@ function PagosPage() {
     }
   }
 
+  async function confirmAnnulment() {
+    if (!pendingAnnulment || isSaving) return
+
+    setIsSaving(true)
+    setError(null)
+    setFeedback(null)
+
+    try {
+      const annulled = await annulPayment(
+        authenticatedRequest,
+        pendingAnnulment.id,
+      )
+
+      setPagos((current) =>
+        current.map((payment) =>
+          payment.id === annulled.id
+            ? toPaymentSummary(annulled)
+            : payment,
+        ),
+      )
+
+      if (selected?.id === annulled.id) {
+        setSelected(annulled)
+
+        try {
+          const receiptResult = await getPagoComprobante(
+            authenticatedRequest,
+            annulled.id,
+          )
+          setReceipt(receiptResult)
+        } catch {
+          setReceipt(null)
+        }
+      }
+
+      try {
+        const obligationsResult = await getObligaciones(
+          authenticatedRequest,
+        )
+        setObligaciones(
+          Array.isArray(obligationsResult)
+            ? obligationsResult
+            : [],
+        )
+      } catch {
+        // La anulacion ya fue confirmada por el servidor.
+        // Una recarga posterior volvera a sincronizar referencias.
+      }
+
+      setPendingAnnulment(null)
+      setFeedback(
+        'Pago anulado correctamente. Las obligaciones asociadas volvieron a estar pendientes.',
+      )
+    } catch (requestError) {
+      setError(
+        getRequestMessage(
+          requestError,
+          'No se pudo anular el pago.',
+        ),
+      )
+
+      if (requestError?.status === 409) {
+        try {
+          const refreshed = await getPagoById(
+            authenticatedRequest,
+            pendingAnnulment.id,
+          )
+
+          setPagos((current) =>
+            current.map((payment) =>
+              payment.id === refreshed.id
+                ? toPaymentSummary(refreshed)
+                : payment,
+            ),
+          )
+
+          if (selected?.id === refreshed.id) {
+            setSelected(refreshed)
+          }
+        } catch {
+          // Conservamos el error original de anulacion.
+        }
+      }
+    } finally {
+      setIsSaving(false)
+    }
+  }
   async function openPayment(id) {
     setIsDetailLoading(true)
     setError(null)
@@ -469,6 +558,8 @@ function PagosPage() {
             />
           ) : (
             <PaymentList
+              isSaving={isSaving}
+              onAnnul={setPendingAnnulment}
               onOpen={openPayment}
               pagos={pagos}
             />
@@ -489,6 +580,14 @@ function PagosPage() {
         />
       )}
 
+      {pendingAnnulment && (
+        <PaymentAnnulmentDialog
+          isSaving={isSaving}
+          onCancel={() => setPendingAnnulment(null)}
+          onConfirm={confirmAnnulment}
+          payment={pendingAnnulment}
+        />
+      )}
       {pendingConfirmation && selectedHolder && (
         <ConfirmationDialog
           holder={selectedHolder}
@@ -811,7 +910,7 @@ function ConfirmationDialog({
   )
 }
 
-function PaymentList({ onOpen, pagos }) {
+function PaymentList({ isSaving, onAnnul, onOpen, pagos }) {
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
@@ -853,13 +952,26 @@ function PaymentList({ onOpen, pagos }) {
                 </td>
 
                 <td className="py-4 text-right">
-                  <button
-                    className={secondaryButton}
-                    onClick={() => onOpen(payment.id)}
-                    type="button"
-                  >
-                    Ver detalle
-                  </button>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      className={secondaryButton}
+                      onClick={() => onOpen(payment.id)}
+                      type="button"
+                    >
+                      Ver detalle
+                    </button>
+
+                    {isRegisteredPayment(payment.estado) && (
+                      <button
+                        className={dangerButton}
+                        disabled={isSaving}
+                        onClick={() => onAnnul(payment)}
+                        type="button"
+                      >
+                        Anular
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -902,7 +1014,7 @@ function PaymentList({ onOpen, pagos }) {
               />
             </dl>
 
-            <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+            <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
               <button
                 className={secondaryButton}
                 onClick={() => onOpen(payment.id)}
@@ -910,6 +1022,17 @@ function PaymentList({ onOpen, pagos }) {
               >
                 Ver detalle
               </button>
+
+              {isRegisteredPayment(payment.estado) && (
+                <button
+                  className={dangerButton}
+                  disabled={isSaving}
+                  onClick={() => onAnnul(payment)}
+                  type="button"
+                >
+                  Anular
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -918,6 +1041,71 @@ function PaymentList({ onOpen, pagos }) {
   )
 }
 
+function PaymentAnnulmentDialog({
+  isSaving,
+  onCancel,
+  onConfirm,
+  payment,
+}) {
+  return (
+    <Dialog title="¿Deseas anular este pago?">
+      <p className="text-sm leading-6 text-slate-600">
+        El pago permanecerá en el historial. Las obligaciones
+        asociadas volverán a estar pendientes y este pago dejará
+        de contabilizarse como ingreso financiero.
+      </p>
+
+      <dl className="mt-4 space-y-2 rounded-md bg-slate-50 p-4 text-sm">
+        <div>
+          <dt className="inline font-medium text-slate-500">
+            Comprobante:{' '}
+          </dt>
+          <dd className="inline font-semibold text-slate-800">
+            {payment.numeroComprobante}
+          </dd>
+        </div>
+
+        <div>
+          <dt className="inline font-medium text-slate-500">
+            Titular:{' '}
+          </dt>
+          <dd className="inline text-slate-700">
+            {payment.titular.nombre}
+          </dd>
+        </div>
+
+        <div>
+          <dt className="inline font-medium text-slate-500">
+            Monto:{' '}
+          </dt>
+          <dd className="inline font-semibold text-slate-800">
+            {formatMoney(payment.monto)}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button
+          className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          disabled={isSaving}
+          onClick={onCancel}
+          type="button"
+        >
+          Volver
+        </button>
+
+        <button
+          className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isSaving}
+          onClick={onConfirm}
+          type="button"
+        >
+          {isSaving ? 'Anulando...' : 'Confirmar anulación'}
+        </button>
+      </div>
+    </Dialog>
+  )
+}
 function PaymentDetail({ payment, receipt }) {
   return (
     <Panel>
@@ -1476,6 +1664,15 @@ function toPaymentSummary(payment) {
 const inputClass =
   'mt-1.5 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20 disabled:cursor-not-allowed disabled:bg-slate-100'
 
+const dangerButton =
+  'rounded-md border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60'
+
+function isRegisteredPayment(value) {
+  return (
+    value === 1 ||
+    String(value).toLowerCase() === 'registrado'
+  )
+}
 const secondaryButton =
   'rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60'
 
@@ -1485,6 +1682,13 @@ function formatPaymentStatus(value) {
     String(value).toLowerCase() === 'registrado'
   ) {
     return 'Registrado'
+  }
+
+  if (
+    value === 2 ||
+    String(value).toLowerCase() === 'anulado'
+  ) {
+    return 'Anulado'
   }
 
   return String(value || 'Desconocido')

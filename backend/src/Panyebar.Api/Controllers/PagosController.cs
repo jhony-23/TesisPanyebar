@@ -102,6 +102,48 @@ public sealed class PagosController : ControllerBase
         };
     }
 
+    [HttpPost("{id:int}/anulacion")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.PagosGestionar)]
+    public async Task<IActionResult> Annul(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId))
+        {
+            return Unauthorized(new
+            {
+                message = "No se pudo identificar al usuario administrativo autenticado."
+            });
+        }
+
+        var result = await _service.AnnulAsync(
+            id,
+            userId,
+            cancellationToken);
+
+        return result.Error switch
+        {
+            PagoOperationError.Invalid =>
+                BadRequest(new
+                {
+                    message = "Los datos para anular el pago no son válidos."
+                }),
+
+            PagoOperationError.NotFound =>
+                NotFound(new
+                {
+                    message = "Pago no encontrado."
+                }),
+
+            PagoOperationError.Conflict =>
+                Conflict(new
+                {
+                    message = "El pago ya está anulado o no puede anularse en su estado actual."
+                }),
+
+            _ => Ok(result.Value)
+        };
+    }
     private bool TryGetAuthenticatedUserId(out int userId)
     {
         var claim = User.FindFirstValue(ClaimTypes.NameIdentifier)

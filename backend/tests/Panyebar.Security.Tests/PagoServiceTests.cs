@@ -447,6 +447,152 @@ public sealed class PagoServiceTests
         Assert.Empty(context.Pagos);
     }
 
+    [Fact]
+    public async Task AnnulAsync_AnnulsPaymentRestoresObligationAndCreatesAudit()
+    {
+        await using var context = CreateContext();
+        var setup = AddReferences(context);
+
+        var obligation = SupplyObligation(setup.Supply.Id, 30m, "2026");
+        context.Obligaciones.Add(obligation);
+        await context.SaveChangesAsync();
+
+        var service = new PagoService(context);
+
+        var registered = await service.RegisterAsync(
+            new RegistrarPagoInput(
+                30m,
+                "Pago original",
+                new[] { obligation.Id }),
+            setup.User.Id);
+
+        Assert.True(registered.Succeeded);
+
+        var result = await service.AnnulAsync(
+            registered.Value!.Id,
+            setup.User.Id);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(EstadoPago.Anulado, result.Value!.Estado);
+
+        Assert.Equal(
+            EstadoObligacion.Pendiente,
+            (await context.Obligaciones.FindAsync(obligation.Id))!.Estado);
+
+        Assert.Single(context.AplicacionesPago);
+
+        var audit = Assert.Single(
+            context.Auditorias.Where(a => a.Accion == "PAGO.ANULAR"));
+
+        Assert.Equal(registered.Value.Id, audit.EntidadId);
+        Assert.Equal(setup.User.Id, audit.UsuarioAdministrativoId);
+        Assert.Contains("Estado:Registrado", audit.ValorAnterior);
+        Assert.Contains("Estado:Anulado", audit.ValorNuevo);
+    }
+
+    [Fact]
+    public async Task AnnulAsync_RejectsSecondAnnulment()
+    {
+        await using var context = CreateContext();
+        var setup = AddReferences(context);
+
+        var obligation = SupplyObligation(setup.Supply.Id, 30m, "2026");
+        context.Obligaciones.Add(obligation);
+        await context.SaveChangesAsync();
+
+        var service = new PagoService(context);
+
+        var registered = await service.RegisterAsync(
+            new RegistrarPagoInput(
+                30m,
+                "Pago",
+                new[] { obligation.Id }),
+            setup.User.Id);
+
+        Assert.True(registered.Succeeded);
+
+        var first = await service.AnnulAsync(
+            registered.Value!.Id,
+            setup.User.Id);
+
+        var second = await service.AnnulAsync(
+            registered.Value.Id,
+            setup.User.Id);
+
+        Assert.True(first.Succeeded);
+        Assert.Equal(PagoOperationError.Conflict, second.Error);
+
+        Assert.Single(
+            context.Auditorias.Where(a => a.Accion == "PAGO.ANULAR"));
+    }
+
+    [Fact]
+    public async Task AnnulAsync_RejectsInvalidMissingAndUnknownUser()
+    {
+        await using var context = CreateContext();
+        var setup = AddReferences(context);
+        var service = new PagoService(context);
+
+        var invalid = await service.AnnulAsync(0, setup.User.Id);
+        var missing = await service.AnnulAsync(999, setup.User.Id);
+        var unknownUser = await service.AnnulAsync(1, 999);
+
+        Assert.Equal(PagoOperationError.Invalid, invalid.Error);
+        Assert.Equal(PagoOperationError.NotFound, missing.Error);
+        Assert.Equal(PagoOperationError.Invalid, unknownUser.Error);
+
+        Assert.Empty(
+            context.Auditorias.Where(a => a.Accion == "PAGO.ANULAR"));
+    }
+
+    [Fact]
+    public async Task AnnulAsync_AllowsSameObligationToBePaidAgain()
+    {
+        await using var context = CreateContext();
+        var setup = AddReferences(context);
+
+        var obligation = SupplyObligation(setup.Supply.Id, 30m, "2026");
+        context.Obligaciones.Add(obligation);
+        await context.SaveChangesAsync();
+
+        var service = new PagoService(context);
+
+        var firstPayment = await service.RegisterAsync(
+            new RegistrarPagoInput(
+                30m,
+                "Pago original",
+                new[] { obligation.Id }),
+            setup.User.Id);
+
+        Assert.True(firstPayment.Succeeded);
+
+        var annulment = await service.AnnulAsync(
+            firstPayment.Value!.Id,
+            setup.User.Id);
+
+        Assert.True(annulment.Succeeded);
+        Assert.Equal(EstadoObligacion.Pendiente, obligation.Estado);
+
+        var secondPayment = await service.RegisterAsync(
+            new RegistrarPagoInput(
+                30m,
+                "Repago",
+                new[] { obligation.Id }),
+            setup.User.Id);
+
+        Assert.True(secondPayment.Succeeded);
+        Assert.NotEqual(firstPayment.Value.Id, secondPayment.Value!.Id);
+
+        var persistedFirst = await context.Pagos.FindAsync(firstPayment.Value.Id);
+        var persistedSecond = await context.Pagos.FindAsync(secondPayment.Value.Id);
+
+        Assert.Equal(EstadoPago.Anulado, persistedFirst!.Estado);
+        Assert.Equal(EstadoPago.Registrado, persistedSecond!.Estado);
+        Assert.Equal(EstadoObligacion.Pagada, obligation.Estado);
+
+        Assert.Equal(2, context.Pagos.Count());
+        Assert.Equal(2, context.AplicacionesPago.Count());
+    }
     private static Obligacion SupplyObligation(
         int supplyId,
         decimal amount,

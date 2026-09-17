@@ -18,3 +18,8 @@ export function registerPago(authenticatedRequest, input) {
 export function getPagoComprobante(authenticatedRequest, id) {
   return authenticatedRequest(`${pagoPath}/${id}/comprobante`)
 }
+export function annulPayment(authenticatedRequest, id) {
+  return authenticatedRequest(`/pagos/${id}/anulacion`, {
+    method: 'POST',
+  })
+}

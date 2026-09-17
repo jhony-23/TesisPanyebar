@@ -144,6 +144,69 @@ public sealed class PagosControllerSecurityTests
         Assert.Equal(30m, receipt.Total);
     }
 
+    [Fact]
+    public async Task Annul_UsesAuthenticatedUserAndPaymentId()
+    {
+        var service = new CapturingPagoService
+        {
+            AnnulResult =
+                PagoOperationResult<PagoDetalleDto>.Success(
+                    Detail())
+        };
+
+        var controller = Controller(service, "8");
+
+        var result = await controller.Annul(
+            15,
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<PagoDetalleDto>(ok.Value);
+
+        Assert.Equal(1, service.AnnulCalls);
+        Assert.Equal(15, service.CapturedAnnulPaymentId);
+        Assert.Equal(8, service.CapturedAnnulUserId);
+    }
+
+    [Fact]
+    public async Task Annul_ReturnsUnauthorizedWhenAuthenticatedUserIdIsInvalid()
+    {
+        var service = new CapturingPagoService();
+
+        var controller = Controller(service, "invalid");
+
+        var result = await controller.Annul(
+            1,
+            CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+        Assert.Equal(0, service.AnnulCalls);
+        Assert.Null(service.CapturedAnnulUserId);
+    }
+
+    [Theory]
+    [InlineData(PagoOperationError.Invalid, typeof(BadRequestObjectResult))]
+    [InlineData(PagoOperationError.NotFound, typeof(NotFoundObjectResult))]
+    [InlineData(PagoOperationError.Conflict, typeof(ConflictObjectResult))]
+    public async Task Annul_MapsOperationErrorsToExpectedHttpStatus(
+        PagoOperationError error,
+        Type expectedResultType)
+    {
+        var service = new CapturingPagoService
+        {
+            AnnulResult =
+                PagoOperationResult<PagoDetalleDto>.Failure(error)
+        };
+
+        var controller = Controller(service, "8");
+
+        var result = await controller.Annul(
+            1,
+            CancellationToken.None);
+
+        Assert.IsType(expectedResultType, result);
+        Assert.Equal(1, service.AnnulCalls);
+    }
     private static PagosController Controller(
         CapturingPagoService service,
         string userId)
@@ -215,6 +278,16 @@ public sealed class PagosControllerSecurityTests
 
         public int RegisterCalls { get; private set; }
 
+        public int AnnulCalls { get; private set; }
+
+        public int? CapturedAnnulUserId { get; private set; }
+
+        public int? CapturedAnnulPaymentId { get; private set; }
+
+        public PagoOperationResult<PagoDetalleDto> AnnulResult { get; set; } =
+            PagoOperationResult<PagoDetalleDto>.Failure(
+                PagoOperationError.Invalid);
+
         public PagoOperationResult<PagoDetalleDto> RegisterResult { get; set; } =
             PagoOperationResult<PagoDetalleDto>.Failure(
                 PagoOperationError.Invalid);
@@ -242,6 +315,17 @@ public sealed class PagosControllerSecurityTests
             return Task.FromResult(RegisterResult);
         }
 
+        public Task<PagoOperationResult<PagoDetalleDto>> AnnulAsync(
+            int id,
+            int usuarioAdministrativoId,
+            CancellationToken cancellationToken = default)
+        {
+            AnnulCalls++;
+            CapturedAnnulPaymentId = id;
+            CapturedAnnulUserId = usuarioAdministrativoId;
+
+            return Task.FromResult(AnnulResult);
+        }
         public Task<ComprobantePagoDto?> GetComprobanteAsync(
             int id,
             CancellationToken cancellationToken = default) =>

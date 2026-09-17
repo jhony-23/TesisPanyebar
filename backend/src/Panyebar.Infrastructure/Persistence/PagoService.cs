@@ -244,6 +244,127 @@ public sealed class PagoService : IPagoService
             : PagoOperationResult<PagoDetalleDto>.Success(detail);
     }
 
+    public async Task<PagoOperationResult<PagoDetalleDto>> AnnulAsync(
+        int id,
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0 || usuarioAdministrativoId <= 0)
+        {
+            return Failure(PagoOperationError.Invalid);
+        }
+
+        var usuarioExiste = await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .AnyAsync(
+                u => u.Id == usuarioAdministrativoId,
+                cancellationToken);
+
+        if (!usuarioExiste)
+        {
+            return Failure(PagoOperationError.Invalid);
+        }
+
+        var pago = await _dbContext.Pagos
+            .SingleOrDefaultAsync(
+                p => p.Id == id,
+                cancellationToken);
+
+        if (pago is null)
+        {
+            return Failure(PagoOperationError.NotFound);
+        }
+
+        if (pago.Estado != EstadoPago.Registrado)
+        {
+            return Failure(PagoOperationError.Conflict);
+        }
+
+        var aplicaciones = await _dbContext.AplicacionesPago
+            .Where(ap => ap.PagoId == pago.Id)
+            .OrderBy(ap => ap.Id)
+            .ToListAsync(cancellationToken);
+
+        if (aplicaciones.Count == 0)
+        {
+            return Failure(PagoOperationError.Conflict);
+        }
+
+        var obligacionIds = aplicaciones
+            .Select(ap => ap.ObligacionId)
+            .Distinct()
+            .ToArray();
+
+        var obligaciones = await _dbContext.Obligaciones
+            .Where(o => obligacionIds.Contains(o.Id))
+            .OrderBy(o => o.Id)
+            .ToListAsync(cancellationToken);
+
+        if (obligaciones.Count != obligacionIds.Length)
+        {
+            return Failure(PagoOperationError.Conflict);
+        }
+
+        if (obligaciones.Any(o => o.Estado != EstadoObligacion.Pagada))
+        {
+            return Failure(PagoOperationError.Conflict);
+        }
+
+        await using var transaction =
+            await BeginTransactionIfRelationalAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var valorAnterior =
+            $"Monto:{pago.Monto:0.00}; " +
+            $"ObligacionIds:{string.Join(",", obligacionIds)}; " +
+            $"Estado:{pago.Estado}";
+
+        pago.Estado = EstadoPago.Anulado;
+
+        foreach (var obligacion in obligaciones)
+        {
+            obligacion.Estado = EstadoObligacion.Pendiente;
+        }
+
+        _dbContext.Auditorias.Add(new Auditoria
+        {
+            UsuarioAdministrativoId = usuarioAdministrativoId,
+            Accion = "PAGO.ANULAR",
+            Entidad = nameof(Pago),
+            EntidadId = pago.Id,
+            Fecha = now,
+            ValorAnterior = valorAnterior,
+            ValorNuevo =
+                $"Monto:{pago.Monto:0.00}; " +
+                $"ObligacionIds:{string.Join(",", obligacionIds)}; " +
+                $"Estado:{pago.Estado}"
+        });
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
+
+            throw;
+        }
+
+        var detail = await GetByIdAsync(pago.Id, cancellationToken);
+
+        return detail is null
+            ? Failure(PagoOperationError.NotFound)
+            : PagoOperationResult<PagoDetalleDto>.Success(detail);
+    }
     public async Task<ComprobantePagoDto?> GetComprobanteAsync(
         int id,
         CancellationToken cancellationToken = default)
