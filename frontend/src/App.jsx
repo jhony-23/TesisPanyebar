@@ -12,6 +12,7 @@ import PagosPage from './pages/PagosPage.jsx'
 import JornadasPage from './pages/JornadasPage.jsx'
 import PersonasPage from './pages/PersonasPage.jsx'
 import CuotasPage from './pages/CuotasPage.jsx'
+import FinanzasPage from './pages/FinanzasPage.jsx'
 import SectoresPage from './pages/SectoresPage.jsx'
 import SolicitudesNuevoServicioPage from './pages/SolicitudesNuevoServicioPage.jsx'
 import SuministrosPage from './pages/SuministrosPage.jsx'
@@ -39,6 +40,7 @@ function App() {
               <Route element={<CuotasPage />} path="/admin/cuotas" />
               <Route element={<ObligacionesPage />} path="/admin/obligaciones" />
               <Route element={<PagosPage />} path="/admin/pagos" />
+              <Route element={<FinanzasPage />} path="/admin/finanzas" />
               <Route element={<JornadasPage />} path="/admin/jornadas" />
             </Route>
           </Route>

@@ -12,7 +12,7 @@ const navigation = [
   { label: 'Obligaciones', path: '/admin/obligaciones', available: true, icon: 'document' },
   { label: 'Jornadas', path: '/admin/jornadas', available: true, icon: 'calendar' },
   { label: 'Pagos', path: '/admin/pagos', available: true, icon: 'card' },
-  { label: 'Finanzas', available: false, icon: 'chart' },
+  { label: 'Finanzas', path: '/admin/finanzas', available: true, icon: 'chart' },
   { label: 'Reportes', available: false, icon: 'report' },
   { label: 'Abastecimiento', available: false, icon: 'truck' },
   { label: 'Administración', available: false, icon: 'settings' },
