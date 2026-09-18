@@ -297,6 +297,70 @@ public sealed class AdministrativeAccessController : ControllerBase
 
         return int.TryParse(claim, out userId) && userId > 0;
     }
+
+    [HttpGet("auditoria")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.SeguridadAuditoriaVer)]
+    public async Task<IActionResult> GetAuditoria(
+        [FromQuery] DateTime? fechaDesde,
+        [FromQuery] DateTime? fechaHasta,
+        [FromQuery] int? usuarioId,
+        [FromQuery] string? accion,
+        [FromQuery] string? entidad,
+        [FromQuery] int limite = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (usuarioId.HasValue && usuarioId.Value <= 0)
+        {
+            return BadRequest(new
+            {
+                message = "El usuario indicado no es válido."
+            });
+        }
+
+        if (limite < 1 || limite > 500)
+        {
+            return BadRequest(new
+            {
+                message = "El límite debe estar entre 1 y 500."
+            });
+        }
+
+        if (fechaDesde.HasValue &&
+            fechaHasta.HasValue &&
+            fechaDesde.Value > fechaHasta.Value)
+        {
+            return BadRequest(new
+            {
+                message = "El rango de fechas no es válido."
+            });
+        }
+
+        DateTime? fromUtc = fechaDesde.HasValue
+            ? NormalizeUtc(fechaDesde.Value)
+            : null;
+
+        DateTime? untilUtcExclusive = fechaHasta.HasValue
+            ? NormalizeUtc(fechaHasta.Value).AddTicks(1)
+            : null;
+
+        return Ok(
+            await _service.GetAuditoriaAsync(
+                fromUtc,
+                untilUtcExclusive,
+                usuarioId,
+                accion,
+                entidad,
+                limite,
+                cancellationToken));
+    }
+
+    private static DateTime NormalizeUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 }
 
 public sealed class CreateUsuarioRequest
@@ -329,4 +393,7 @@ public sealed class CreateRolRequest
 public sealed class UpdatePermisosRequest
 {
     public IEnumerable<int> PermisoIds { get; set; } = Array.Empty<int>();
+
+
+
 }

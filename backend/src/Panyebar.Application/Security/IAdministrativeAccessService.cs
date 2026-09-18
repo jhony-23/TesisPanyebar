@@ -66,6 +66,15 @@ public interface IAdministrativeAccessService
     Task<PermisoSummary?> GetPermisoByIdAsync(
         int id,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AuditoriaAdministrativaDto>> GetAuditoriaAsync(
+        DateTime? fechaDesdeUtc,
+        DateTime? fechaHastaUtcExclusive,
+        int? usuarioId,
+        string? accion,
+        string? entidad,
+        int limite = 200,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record UsuarioAdministrativoAccessSummary(
@@ -116,3 +125,13 @@ public sealed record AdministrativeAccessResult<T>(
         AdministrativeAccessError error) =>
         new(default, error);
 }
+public sealed record AuditoriaAdministrativaDto(
+    int Id,
+    DateTime Fecha,
+    int UsuarioAdministrativoId,
+    string NombreUsuario,
+    string Accion,
+    string Entidad,
+    int EntidadId,
+    string? ValorAnterior,
+    string? ValorNuevo);

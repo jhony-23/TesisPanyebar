@@ -35,4 +35,6 @@ public static class AdministrativePermissionCodes
 
     public const string AdministracionVer = "ADMINISTRACION.VER";
     public const string AdministracionGestionar = "ADMINISTRACION.GESTIONAR";
+
+    public const string SeguridadAuditoriaVer = "SEGURIDAD.AUDITORIA.VER";
 }

@@ -16,7 +16,7 @@ const navigation = [
   { label: 'Dashboard', path: '/admin/dashboard', available: true, icon: 'chart' },
   { label: 'Reportes', path: '/admin/reportes', available: true, icon: 'report' },
   { label: 'Abastecimiento', path: '/admin/abastecimiento', available: true, icon: 'water' },
-  { label: 'Administración', available: false, icon: 'settings' },
+  { label: 'Administración', path: '/admin/administracion', available: true, icon: 'settings' },
 ]
 
 function AdminLayout() {

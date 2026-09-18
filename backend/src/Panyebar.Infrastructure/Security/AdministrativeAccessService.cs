@@ -939,6 +939,83 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
 
         return false;
     }
+    public async Task<IReadOnlyList<AuditoriaAdministrativaDto>> GetAuditoriaAsync(
+        DateTime? fechaDesdeUtc,
+        DateTime? fechaHastaUtcExclusive,
+        int? usuarioId,
+        string? accion,
+        string? entidad,
+        int limite = 200,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedAction = accion?.Trim();
+        var normalizedEntity = entidad?.Trim();
+
+        if (limite < 1)
+        {
+            limite = 1;
+        }
+        else if (limite > 500)
+        {
+            limite = 500;
+        }
+
+        var query =
+            from audit in _dbContext.Auditorias.AsNoTracking()
+            join user in _dbContext.UsuariosAdministrativos.AsNoTracking()
+                on audit.UsuarioAdministrativoId equals user.Id
+            select new
+            {
+                Audit = audit,
+                user.NombreUsuario
+            };
+
+        if (fechaDesdeUtc.HasValue)
+        {
+            query = query.Where(
+                row => row.Audit.Fecha >= fechaDesdeUtc.Value);
+        }
+
+        if (fechaHastaUtcExclusive.HasValue)
+        {
+            query = query.Where(
+                row => row.Audit.Fecha < fechaHastaUtcExclusive.Value);
+        }
+
+        if (usuarioId.HasValue)
+        {
+            query = query.Where(
+                row => row.Audit.UsuarioAdministrativoId == usuarioId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedAction))
+        {
+            query = query.Where(
+                row => row.Audit.Accion.Contains(normalizedAction));
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedEntity))
+        {
+            query = query.Where(
+                row => row.Audit.Entidad.Contains(normalizedEntity));
+        }
+
+        return await query
+            .OrderByDescending(row => row.Audit.Fecha)
+            .ThenByDescending(row => row.Audit.Id)
+            .Take(limite)
+            .Select(row => new AuditoriaAdministrativaDto(
+                row.Audit.Id,
+                row.Audit.Fecha,
+                row.Audit.UsuarioAdministrativoId,
+                row.NombreUsuario,
+                row.Audit.Accion,
+                row.Audit.Entidad,
+                row.Audit.EntidadId,
+                row.Audit.ValorAnterior,
+                row.Audit.ValorNuevo))
+            .ToListAsync(cancellationToken);
+    }
     private void AddAudit(
         int actorUsuarioId,
         string action,

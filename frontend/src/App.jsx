@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './app/AuthContext.jsx'
 import AdminLayout from './components/AdminLayout.jsx'
@@ -20,6 +21,9 @@ import SectoresPage from './pages/SectoresPage.jsx'
 import SolicitudesNuevoServicioPage from './pages/SolicitudesNuevoServicioPage.jsx'
 import SuministrosPage from './pages/SuministrosPage.jsx'
 import SuministroQrPage from './pages/SuministroQrPage.jsx'
+const AdministracionPage = lazy(
+  () => import('./pages/AdministracionPage'),
+)
 
 function App() {
   return (
@@ -48,6 +52,16 @@ function App() {
               <Route element={<ReportesPage />} path="/admin/reportes" />
               <Route element={<JornadasPage />} path="/admin/jornadas" />
               <Route element={<AbastecimientoPage />} path="/admin/abastecimiento" />
+        <Route
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<AdministracionLoading />}>
+                <AdministracionPage />
+              </Suspense>
+            </ProtectedRoute>
+          }
+          path="/admin/administracion"
+        />
             </Route>
           </Route>
           <Route element={<NotFoundPage />} path="*" />
@@ -71,4 +85,14 @@ function PublicLayout() {
   )
 }
 
+function AdministracionLoading() {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-6 py-14 text-center shadow-sm">
+      <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-[#28727a]" />
+      <p className="mt-4 text-sm text-slate-500">
+        Cargando administración...
+      </p>
+    </div>
+  )
+}
 export default App
