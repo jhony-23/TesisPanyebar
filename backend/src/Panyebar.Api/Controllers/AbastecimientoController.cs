@@ -74,6 +74,56 @@ public sealed class AbastecimientoController : ControllerBase
         return MapMutationResult(result, true);
     }
 
+    [HttpPost("recurrente")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.AbastecimientoGestionar)]
+    public async Task<IActionResult> CreateRecurring(
+        [FromBody] ProgramacionRecurrenteAbastecimientoInput request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId))
+        {
+            return Unauthorized(new
+            {
+                message = "No se pudo identificar al usuario administrativo autenticado."
+            });
+        }
+
+        var result = await _service.CreateRecurringAsync(
+            request,
+            userId,
+            cancellationToken);
+
+        return result.Error switch
+        {
+            AbastecimientoOperationError.Invalid =>
+                BadRequest(new
+                {
+                    message = "La configuración de recurrencia no es válida."
+                }),
+
+            AbastecimientoOperationError.SectorNotFound =>
+                BadRequest(new
+                {
+                    message = "El sector seleccionado no existe."
+                }),
+
+            AbastecimientoOperationError.SectorInactive =>
+                Conflict(new
+                {
+                    message = "El sector seleccionado está inactivo."
+                }),
+
+            AbastecimientoOperationError.Conflict =>
+                Conflict(new
+                {
+                    message = "Una o más fechas recurrentes entran en conflicto con programaciones existentes."
+                }),
+
+            _ => Created(
+                "/api/abastecimiento",
+                result.Value)
+        };
+    }
     [HttpPut("{id:int}")]
     [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.AbastecimientoGestionar)]
     public async Task<IActionResult> Update(
@@ -175,7 +225,7 @@ public sealed class AbastecimientoController : ControllerBase
             AbastecimientoOperationError.Conflict =>
                 Conflict(new
                 {
-                    message = "La operación entra en conflicto con el estado o con otra programación del sector."
+                    message = "La programación no puede modificarse porque ya finalizó o porque el horario se solapa con otra programación activa del mismo sector."
                 }),
 
             _ when created =>

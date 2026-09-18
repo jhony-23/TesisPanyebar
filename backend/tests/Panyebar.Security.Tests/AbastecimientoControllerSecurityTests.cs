@@ -17,6 +17,9 @@ public sealed class AbastecimientoControllerSecurityTests
         nameof(AbastecimientoController.Create),
         AdministrativePermissionCodes.AbastecimientoGestionar)]
     [InlineData(
+        nameof(AbastecimientoController.CreateRecurring),
+        AdministrativePermissionCodes.AbastecimientoGestionar)]
+    [InlineData(
         nameof(AbastecimientoController.Update),
         AdministrativePermissionCodes.AbastecimientoGestionar)]
     [InlineData(

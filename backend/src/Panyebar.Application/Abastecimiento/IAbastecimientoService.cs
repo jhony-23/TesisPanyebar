@@ -17,6 +17,11 @@ public interface IAbastecimientoService
         int usuarioAdministrativoId,
         CancellationToken cancellationToken = default);
 
+    Task<AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>> CreateRecurringAsync(
+        ProgramacionRecurrenteAbastecimientoInput input,
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default);
+
     Task<AbastecimientoOperationResult<ProgramacionAbastecimientoDto>> UpdateAsync(
         int id,
         ProgramacionAbastecimientoInput input,
@@ -42,6 +47,13 @@ public static class EstadosProgramacionAbastecimiento
     public const string Cancelado = "Cancelado";
 }
 
+public enum TipoRecurrenciaAbastecimiento
+{
+    Semanal = 1,
+    Mensual = 2,
+    Anual = 3
+}
+
 public sealed record ProgramacionAbastecimientoDto(
     int Id,
     int SectorId,
@@ -58,6 +70,20 @@ public sealed record ProgramacionAbastecimientoInput(
     TimeSpan HoraInicio,
     TimeSpan HoraFin,
     string? Observacion);
+
+public sealed record ProgramacionRecurrenteAbastecimientoInput(
+    int SectorId,
+    DateOnly FechaInicial,
+    TimeSpan HoraInicio,
+    TimeSpan HoraFin,
+    string? Observacion,
+    TipoRecurrenciaAbastecimiento Recurrencia,
+    int? CantidadOcurrencias,
+    DateOnly? FechaFin);
+
+public sealed record CreacionRecurrenteAbastecimientoDto(
+    int CantidadCreada,
+    IReadOnlyList<ProgramacionAbastecimientoDto> Programaciones);
 
 public sealed record ActualizarEstadoAbastecimientoInput(
     string? Observacion);

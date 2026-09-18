@@ -174,6 +174,145 @@ public sealed class AbastecimientoService : IAbastecimientoService
             .Success(ToDto(programacion, sector.Nombre));
     }
 
+    public async Task<AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>> CreateRecurringAsync(
+        ProgramacionRecurrenteAbastecimientoInput input,
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default)
+    {
+        if (input is null ||
+            usuarioAdministrativoId <= 0 ||
+            input.SectorId <= 0 ||
+            !Enum.IsDefined(typeof(TipoRecurrenciaAbastecimiento), input.Recurrencia) ||
+            input.HoraInicio < TimeSpan.Zero ||
+            input.HoraInicio >= TimeSpan.FromDays(1) ||
+            input.HoraFin <= TimeSpan.Zero ||
+            input.HoraFin > TimeSpan.FromDays(1) ||
+            input.HoraInicio >= input.HoraFin)
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.Invalid);
+        }
+
+        var observation = NormalizeObservation(input.Observacion);
+
+        if (input.Observacion is not null &&
+            observation is null &&
+            !string.IsNullOrWhiteSpace(input.Observacion))
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.Invalid);
+        }
+
+        var hasCount = input.CantidadOcurrencias.HasValue;
+        var hasEndDate = input.FechaFin.HasValue;
+
+        if (hasCount == hasEndDate)
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.Invalid);
+        }
+
+        if (hasCount &&
+            (input.CantidadOcurrencias!.Value < 2 ||
+             input.CantidadOcurrencias.Value > 52))
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.Invalid);
+        }
+
+        if (hasEndDate && input.FechaFin!.Value <= input.FechaInicial)
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.Invalid);
+        }
+
+        var sector = await _dbContext.Sectores
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                s => s.Id == input.SectorId,
+                cancellationToken);
+
+        if (sector is null)
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.SectorNotFound);
+        }
+
+        if (sector.Estado != EstadoRegistro.Activo)
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.SectorInactive);
+        }
+
+        var dates = GenerateRecurringDates(input);
+
+        if (dates.Count < 2 || dates.Count > 52)
+        {
+            return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                .Failure(AbastecimientoOperationError.Invalid);
+        }
+
+        foreach (var date in dates)
+        {
+            if (await HasOverlapAsync(
+                input.SectorId,
+                date.ToDateTime(TimeOnly.MinValue),
+                input.HoraInicio,
+                input.HoraFin,
+                null,
+                cancellationToken))
+            {
+                return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+                    .Failure(AbastecimientoOperationError.Conflict);
+            }
+        }
+
+        await using var transaction =
+            _dbContext.Database.IsRelational()
+                ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+
+        var entities = dates
+            .Select(date => new ProgramacionAbastecimiento
+            {
+                SectorId = input.SectorId,
+                Fecha = date.ToDateTime(TimeOnly.MinValue),
+                HoraInicio = input.HoraInicio,
+                HoraFin = input.HoraFin,
+                Estado = EstadosProgramacionAbastecimiento.Programado,
+                Observacion = observation
+            })
+            .ToList();
+
+        _dbContext.ProgramacionesAbastecimiento.AddRange(entities);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var entity in entities)
+        {
+            _dbContext.Auditorias.Add(CreateAudit(
+                usuarioAdministrativoId,
+                "ABASTECIMIENTO.CREAR.RECURRENTE",
+                entity.Id,
+                null,
+                Describe(entity)));
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        var result = entities
+            .Select(entity => ToDto(entity, sector.Nombre))
+            .ToList();
+
+        return AbastecimientoOperationResult<CreacionRecurrenteAbastecimientoDto>
+            .Success(new CreacionRecurrenteAbastecimientoDto(
+                result.Count,
+                result));
+    }
     public async Task<AbastecimientoOperationResult<ProgramacionAbastecimientoDto>> UpdateAsync(
         int id,
         ProgramacionAbastecimientoInput input,
@@ -357,19 +496,125 @@ public sealed class AbastecimientoService : IAbastecimientoService
         int? excludedId,
         CancellationToken cancellationToken)
     {
-        return await _dbContext.ProgramacionesAbastecimiento
+        var query = _dbContext.ProgramacionesAbastecimiento
             .AsNoTracking()
             .Where(p =>
                 p.SectorId == sectorId &&
                 p.Fecha == fecha &&
-                p.Estado == EstadosProgramacionAbastecimiento.Programado &&
-                (!excludedId.HasValue || p.Id != excludedId.Value))
-            .AnyAsync(
-                p => horaInicio < p.HoraFin &&
-                     horaFin > p.HoraInicio,
-                cancellationToken);
+                p.Estado == EstadosProgramacionAbastecimiento.Programado);
+
+        if (excludedId.HasValue)
+        {
+            var id = excludedId.Value;
+            query = query.Where(p => p.Id != id);
+        }
+
+        return await query.AnyAsync(
+            p => horaInicio < p.HoraFin &&
+                 horaFin > p.HoraInicio,
+            cancellationToken);
     }
 
+    private static IReadOnlyList<DateOnly> GenerateRecurringDates(
+        ProgramacionRecurrenteAbastecimientoInput input)
+    {
+        var dates = new List<DateOnly>();
+        var current = input.FechaInicial;
+        var targetCount = input.CantidadOcurrencias;
+        var endDate = input.FechaFin;
+
+        while (dates.Count < 52)
+        {
+            if (endDate.HasValue && current > endDate.Value)
+            {
+                break;
+            }
+
+            dates.Add(current);
+
+            if (targetCount.HasValue &&
+                dates.Count >= targetCount.Value)
+            {
+                break;
+            }
+
+            var next = NextRecurringDate(
+                input.FechaInicial,
+                current,
+                input.Recurrencia);
+
+            if (!next.HasValue)
+            {
+                break;
+            }
+
+            current = next.Value;
+        }
+
+        return dates;
+    }
+
+    private static DateOnly? NextRecurringDate(
+        DateOnly original,
+        DateOnly current,
+        TipoRecurrenciaAbastecimiento recurrence)
+    {
+        if (recurrence == TipoRecurrenciaAbastecimiento.Semanal)
+        {
+            return current.AddDays(7);
+        }
+
+        if (recurrence == TipoRecurrenciaAbastecimiento.Mensual)
+        {
+            var year = current.Year;
+            var month = current.Month;
+
+            for (var attempt = 0; attempt < 24; attempt++)
+            {
+                month++;
+
+                if (month == 13)
+                {
+                    month = 1;
+                    year++;
+                }
+
+                if (year > 9999)
+                {
+                    return null;
+                }
+
+                if (original.Day <= DateTime.DaysInMonth(year, month))
+                {
+                    return new DateOnly(
+                        year,
+                        month,
+                        original.Day);
+                }
+            }
+
+            return null;
+        }
+
+        var nextYear = current.Year + 1;
+
+        while (nextYear <= 9999)
+        {
+            if (original.Month != 2 ||
+                original.Day != 29 ||
+                DateTime.IsLeapYear(nextYear))
+            {
+                return new DateOnly(
+                    nextYear,
+                    original.Month,
+                    original.Day);
+            }
+
+            nextYear++;
+        }
+
+        return null;
+    }
     private static (
         int SectorId,
         DateTime Fecha,
