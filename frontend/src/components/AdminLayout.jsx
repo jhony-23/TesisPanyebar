@@ -13,7 +13,8 @@ const navigation = [
   { label: 'Jornadas', path: '/admin/jornadas', available: true, icon: 'calendar' },
   { label: 'Pagos', path: '/admin/pagos', available: true, icon: 'card' },
   { label: 'Finanzas', path: '/admin/finanzas', available: true, icon: 'chart' },
-  { label: 'Reportes', available: false, icon: 'report' },
+  { label: 'Dashboard', path: '/admin/dashboard', available: true, icon: 'chart' },
+  { label: 'Reportes', path: '/admin/reportes', available: true, icon: 'report' },
   { label: 'Abastecimiento', available: false, icon: 'truck' },
   { label: 'Administración', available: false, icon: 'settings' },
 ]
