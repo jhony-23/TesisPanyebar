@@ -30,30 +30,67 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
     public async Task<IReadOnlyList<UsuarioAdministrativoAccessSummary>> GetUsuariosAsync(
         CancellationToken cancellationToken = default)
     {
-        return await _dbContext.UsuariosAdministrativos
+        var users = await _dbContext.UsuariosAdministrativos
             .AsNoTracking()
             .OrderBy(u => u.Id)
-            .Select(u => new UsuarioAdministrativoAccessSummary(
+            .Select(u => new
+            {
                 u.Id,
                 u.NombreUsuario,
-                u.Estado,
-                _dbContext.UsuarioRoles
-                    .AsNoTracking()
-                    .Where(ur => ur.UsuarioAdministrativoId == u.Id)
-                    .Join(
-                        _dbContext.Roles.AsNoTracking(),
-                        ur => ur.RolId,
-                        r => r.Id,
-                        (ur, r) => new RolSummary(
-                            r.Id,
-                            r.Nombre,
-                            r.Descripcion,
-                            r.Estado))
-                    .OrderBy(r => r.Id)
-                    .ToList()))
+                u.Estado
+            })
             .ToListAsync(cancellationToken);
-    }
 
+        if (users.Count == 0)
+        {
+            return Array.Empty<UsuarioAdministrativoAccessSummary>();
+        }
+
+        var userIds = users
+            .Select(u => u.Id)
+            .ToArray();
+
+        var roleRows = await (
+            from ur in _dbContext.UsuarioRoles.AsNoTracking()
+            join role in _dbContext.Roles.AsNoTracking()
+                on ur.RolId equals role.Id
+            where userIds.Contains(ur.UsuarioAdministrativoId)
+            orderby ur.UsuarioAdministrativoId, role.Id
+            select new
+            {
+                ur.UsuarioAdministrativoId,
+                RoleId = role.Id,
+                RoleName = role.Nombre,
+                RoleDescription = role.Descripcion,
+                RoleState = role.Estado
+            })
+            .ToListAsync(cancellationToken);
+
+        var rolesByUser = roleRows
+            .GroupBy(row => row.UsuarioAdministrativoId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<RolSummary>)group
+                    .Select(row => new RolSummary(
+                        row.RoleId,
+                        row.RoleName,
+                        row.RoleDescription,
+                        row.RoleState))
+                    .ToList());
+
+        return users
+            .Select(user =>
+                new UsuarioAdministrativoAccessSummary(
+                    user.Id,
+                    user.NombreUsuario,
+                    user.Estado,
+                    rolesByUser.TryGetValue(
+                        user.Id,
+                        out var roles)
+                        ? roles
+                        : Array.Empty<RolSummary>()))
+            .ToList();
+    }
     public async Task<UsuarioAdministrativoAccessSummary?> GetUsuarioByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
@@ -63,30 +100,51 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
             return null;
         }
 
-        return await _dbContext.UsuariosAdministrativos
+        var user = await _dbContext.UsuariosAdministrativos
             .AsNoTracking()
             .Where(u => u.Id == id)
-            .Select(u => new UsuarioAdministrativoAccessSummary(
+            .Select(u => new
+            {
                 u.Id,
                 u.NombreUsuario,
-                u.Estado,
-                _dbContext.UsuarioRoles
-                    .AsNoTracking()
-                    .Where(ur => ur.UsuarioAdministrativoId == u.Id)
-                    .Join(
-                        _dbContext.Roles.AsNoTracking(),
-                        ur => ur.RolId,
-                        r => r.Id,
-                        (ur, r) => new RolSummary(
-                            r.Id,
-                            r.Nombre,
-                            r.Descripcion,
-                            r.Estado))
-                    .OrderBy(r => r.Id)
-                    .ToList()))
+                u.Estado
+            })
             .SingleOrDefaultAsync(cancellationToken);
-    }
 
+        if (user is null)
+        {
+            return null;
+        }
+
+        var roleRows = await (
+            from ur in _dbContext.UsuarioRoles.AsNoTracking()
+            join role in _dbContext.Roles.AsNoTracking()
+                on ur.RolId equals role.Id
+            where ur.UsuarioAdministrativoId == id
+            orderby role.Id
+            select new
+            {
+                RoleId = role.Id,
+                RoleName = role.Nombre,
+                RoleDescription = role.Descripcion,
+                RoleState = role.Estado
+            })
+            .ToListAsync(cancellationToken);
+
+        var roles = roleRows
+            .Select(row => new RolSummary(
+                row.RoleId,
+                row.RoleName,
+                row.RoleDescription,
+                row.RoleState))
+            .ToList();
+
+        return new UsuarioAdministrativoAccessSummary(
+            user.Id,
+            user.NombreUsuario,
+            user.Estado,
+            roles);
+    }
     public async Task<AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>> CreateUsuarioAsync(
         string nombreUsuario,
         string password,
@@ -385,32 +443,71 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
     public async Task<IReadOnlyList<RolAccessSummary>> GetRolesAsync(
         CancellationToken cancellationToken = default)
     {
-        return await _dbContext.Roles
+        var roles = await _dbContext.Roles
             .AsNoTracking()
             .OrderBy(r => r.Id)
-            .Select(r => new RolAccessSummary(
+            .Select(r => new
+            {
                 r.Id,
                 r.Nombre,
                 r.Descripcion,
-                r.Estado,
-                _dbContext.RolPermisos
-                    .AsNoTracking()
-                    .Where(rp => rp.RolId == r.Id)
-                    .Join(
-                        _dbContext.Permisos.AsNoTracking(),
-                        rp => rp.PermisoId,
-                        p => p.Id,
-                        (rp, p) => new PermisoSummary(
-                            p.Id,
-                            p.Codigo,
-                            p.Nombre,
-                            p.Descripcion,
-                            p.Estado))
-                    .OrderBy(p => p.Id)
-                    .ToList()))
+                r.Estado
+            })
             .ToListAsync(cancellationToken);
-    }
 
+        if (roles.Count == 0)
+        {
+            return Array.Empty<RolAccessSummary>();
+        }
+
+        var roleIds = roles
+            .Select(r => r.Id)
+            .ToArray();
+
+        var permissionRows = await (
+            from rp in _dbContext.RolPermisos.AsNoTracking()
+            join permission in _dbContext.Permisos.AsNoTracking()
+                on rp.PermisoId equals permission.Id
+            where roleIds.Contains(rp.RolId)
+            orderby rp.RolId, permission.Id
+            select new
+            {
+                rp.RolId,
+                PermissionId = permission.Id,
+                PermissionCode = permission.Codigo,
+                PermissionName = permission.Nombre,
+                PermissionDescription = permission.Descripcion,
+                PermissionState = permission.Estado
+            })
+            .ToListAsync(cancellationToken);
+
+        var permissionsByRole = permissionRows
+            .GroupBy(row => row.RolId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<PermisoSummary>)group
+                    .Select(row => new PermisoSummary(
+                        row.PermissionId,
+                        row.PermissionCode,
+                        row.PermissionName,
+                        row.PermissionDescription,
+                        row.PermissionState))
+                    .ToList());
+
+        return roles
+            .Select(role =>
+                new RolAccessSummary(
+                    role.Id,
+                    role.Nombre,
+                    role.Descripcion,
+                    role.Estado,
+                    permissionsByRole.TryGetValue(
+                        role.Id,
+                        out var permissions)
+                        ? permissions
+                        : Array.Empty<PermisoSummary>()))
+            .ToList();
+    }
     public async Task<RolAccessSummary?> GetRolByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
@@ -420,32 +517,55 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
             return null;
         }
 
-        return await _dbContext.Roles
+        var role = await _dbContext.Roles
             .AsNoTracking()
             .Where(r => r.Id == id)
-            .Select(r => new RolAccessSummary(
+            .Select(r => new
+            {
                 r.Id,
                 r.Nombre,
                 r.Descripcion,
-                r.Estado,
-                _dbContext.RolPermisos
-                    .AsNoTracking()
-                    .Where(rp => rp.RolId == r.Id)
-                    .Join(
-                        _dbContext.Permisos.AsNoTracking(),
-                        rp => rp.PermisoId,
-                        p => p.Id,
-                        (rp, p) => new PermisoSummary(
-                            p.Id,
-                            p.Codigo,
-                            p.Nombre,
-                            p.Descripcion,
-                            p.Estado))
-                    .OrderBy(p => p.Id)
-                    .ToList()))
+                r.Estado
+            })
             .SingleOrDefaultAsync(cancellationToken);
-    }
 
+        if (role is null)
+        {
+            return null;
+        }
+
+        var permissionRows = await (
+            from rp in _dbContext.RolPermisos.AsNoTracking()
+            join permission in _dbContext.Permisos.AsNoTracking()
+                on rp.PermisoId equals permission.Id
+            where rp.RolId == id
+            orderby permission.Id
+            select new
+            {
+                PermissionId = permission.Id,
+                PermissionCode = permission.Codigo,
+                PermissionName = permission.Nombre,
+                PermissionDescription = permission.Descripcion,
+                PermissionState = permission.Estado
+            })
+            .ToListAsync(cancellationToken);
+
+        var permissions = permissionRows
+            .Select(row => new PermisoSummary(
+                row.PermissionId,
+                row.PermissionCode,
+                row.PermissionName,
+                row.PermissionDescription,
+                row.PermissionState))
+            .ToList();
+
+        return new RolAccessSummary(
+            role.Id,
+            role.Nombre,
+            role.Descripcion,
+            role.Estado,
+            permissions);
+    }
     public async Task<AdministrativeAccessResult<RolAccessSummary>> CreateRolAsync(
         string nombre,
         string? descripcion,

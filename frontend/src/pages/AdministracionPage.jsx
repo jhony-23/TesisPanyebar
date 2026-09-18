@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useAuth } from '../app/useAuth.js'
+
 import {
   createAdministracion,
   finishAdministracion,
@@ -36,7 +37,7 @@ const tabs = [
 ]
 
 function AdministracionPage() {
-  const { authenticatedRequest } = useOutletContext()
+  const { authenticatedRequest } = useAuth()
   const [activeTab, setActiveTab] = useState('comite')
 
   const selectedTab = useMemo(

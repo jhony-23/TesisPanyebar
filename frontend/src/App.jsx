@@ -52,16 +52,14 @@ function App() {
               <Route element={<ReportesPage />} path="/admin/reportes" />
               <Route element={<JornadasPage />} path="/admin/jornadas" />
               <Route element={<AbastecimientoPage />} path="/admin/abastecimiento" />
-        <Route
-          element={
-            <ProtectedRoute>
-              <Suspense fallback={<AdministracionLoading />}>
-                <AdministracionPage />
-              </Suspense>
-            </ProtectedRoute>
-          }
-          path="/admin/administracion"
-        />
+              <Route
+                element={
+                  <Suspense fallback={<AdministracionLoading />}>
+                    <AdministracionPage />
+                  </Suspense>
+                }
+                path="/admin/administracion"
+              />
             </Route>
           </Route>
           <Route element={<NotFoundPage />} path="*" />
