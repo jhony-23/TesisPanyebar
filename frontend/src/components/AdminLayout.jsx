@@ -15,7 +15,7 @@ const navigation = [
   { label: 'Finanzas', path: '/admin/finanzas', available: true, icon: 'chart' },
   { label: 'Dashboard', path: '/admin/dashboard', available: true, icon: 'chart' },
   { label: 'Reportes', path: '/admin/reportes', available: true, icon: 'report' },
-  { label: 'Abastecimiento', available: false, icon: 'truck' },
+  { label: 'Abastecimiento', path: '/admin/abastecimiento', available: true, icon: 'water' },
   { label: 'Administración', available: false, icon: 'settings' },
 ]
 
@@ -139,6 +139,7 @@ function NavigationIcon({ name }) {
     coins: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v5c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 11v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" /></>,
     document: <><path d="M6 3h9l4 4v14H6z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>,
     drop: <path d="M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z" />,
+    water: <><path d="M12 3.5c-2.8 3.7-5.5 6.7-5.5 10.2a5.5 5.5 0 0 0 11 0C17.5 10.2 14.8 7.2 12 3.5Z" /><path d="M9.5 14.2a2.8 2.8 0 0 0 2.8 2.8" /></>,
     home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10M9 20v-6h6v6" /></>,
     inbox: <><path d="M4 5h16v14H4z" /><path d="M4 14h4l2 2h4l2-2h4" /></>,
     map: <><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z" /><path d="M9 3v15M15 6v15" /></>,

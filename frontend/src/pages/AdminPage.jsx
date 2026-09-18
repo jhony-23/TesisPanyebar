@@ -40,7 +40,7 @@ function AdminPage() {
             </div>
             <div className="rounded-md bg-[#f8f1e5] p-4">
               <p className="text-sm font-semibold text-[#795b2e]">Operación del servicio</p>
-              <p className="mt-1 text-xs leading-5 text-slate-600">Jornadas, pagos y abastecimiento están en preparación.</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">Los módulos administrativos principales se encuentran disponibles.</p>
             </div>
           </div>
         </Panel>

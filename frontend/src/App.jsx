@@ -15,6 +15,7 @@ import CuotasPage from './pages/CuotasPage.jsx'
 import FinanzasPage from './pages/FinanzasPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import ReportesPage from './pages/ReportesPage.jsx'
+import AbastecimientoPage from './pages/AbastecimientoPage.jsx'
 import SectoresPage from './pages/SectoresPage.jsx'
 import SolicitudesNuevoServicioPage from './pages/SolicitudesNuevoServicioPage.jsx'
 import SuministrosPage from './pages/SuministrosPage.jsx'
@@ -46,6 +47,7 @@ function App() {
               <Route element={<DashboardPage />} path="/admin/dashboard" />
               <Route element={<ReportesPage />} path="/admin/reportes" />
               <Route element={<JornadasPage />} path="/admin/jornadas" />
+              <Route element={<AbastecimientoPage />} path="/admin/abastecimiento" />
             </Route>
           </Route>
           <Route element={<NotFoundPage />} path="*" />
