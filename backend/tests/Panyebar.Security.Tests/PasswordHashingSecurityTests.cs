@@ -231,18 +231,47 @@ public class PasswordHashingSecurityTests
             .Options;
 
         await using var dbContext = new PanyebarDbContext(options);
-        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
 
-        var createdUser = await service.CreateUsuarioAsync("nuevo.admin", "Password123!", CancellationToken.None);
+        var actor = new UsuarioAdministrativo
+        {
+            NombreUsuario = "actor.admin",
+            PasswordHash = _passwordHashService.Hash("ActorPassword123!"),
+            Estado = EstadoRegistro.Activo
+        };
 
-        Assert.NotNull(createdUser);
-        Assert.Equal("nuevo.admin", createdUser!.NombreUsuario);
+        dbContext.UsuariosAdministrativos.Add(actor);
+        await dbContext.SaveChangesAsync();
 
-        var persistedUser = await dbContext.UsuariosAdministrativos.SingleAsync();
-        Assert.NotEqual("Password123!", persistedUser.PasswordHash);
-        Assert.True(new PasswordHasherAdapter().Verify(persistedUser.PasswordHash, "Password123!"));
-        Assert.Equal("nuevo.admin", createdUser.NombreUsuario);
-        Assert.Null(typeof(UsuarioAdministrativoAuthenticationResult).GetProperty("PasswordHash"));
+        var service = new AdministrativeAccessService(
+            dbContext,
+            new PasswordHasherAdapter());
+
+        var result = await service.CreateUsuarioAsync(
+            "nuevo.admin",
+            "Password123!",
+            actor.Id,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Value);
+        Assert.Equal("nuevo.admin", result.Value!.NombreUsuario);
+
+        var persistedUser =
+            await dbContext.UsuariosAdministrativos.SingleAsync(
+                u => u.NombreUsuario == "nuevo.admin");
+
+        Assert.NotEqual(
+            "Password123!",
+            persistedUser.PasswordHash);
+
+        Assert.True(
+            new PasswordHasherAdapter().Verify(
+                persistedUser.PasswordHash,
+                "Password123!"));
+
+        Assert.Null(
+            typeof(UsuarioAdministrativoAuthenticationResult)
+                .GetProperty("PasswordHash"));
     }
 
     [Fact]
@@ -253,14 +282,43 @@ public class PasswordHashingSecurityTests
             .Options;
 
         await using var dbContext = new PanyebarDbContext(options);
-        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
 
-        var first = await service.CreateUsuarioAsync("duplicado", "Password123!", CancellationToken.None);
-        var second = await service.CreateUsuarioAsync("duplicado", "OtraPassword123!", CancellationToken.None);
+        var actor = new UsuarioAdministrativo
+        {
+            NombreUsuario = "actor.duplicate",
+            PasswordHash = _passwordHashService.Hash("ActorPassword123!"),
+            Estado = EstadoRegistro.Activo
+        };
 
-        Assert.NotNull(first);
-        Assert.Null(second);
-        Assert.Equal(1, await dbContext.UsuariosAdministrativos.CountAsync());
+        dbContext.UsuariosAdministrativos.Add(actor);
+        await dbContext.SaveChangesAsync();
+
+        var service = new AdministrativeAccessService(
+            dbContext,
+            new PasswordHasherAdapter());
+
+        var first = await service.CreateUsuarioAsync(
+            "duplicado",
+            "Password123!",
+            actor.Id,
+            CancellationToken.None);
+
+        var second = await service.CreateUsuarioAsync(
+            "duplicado",
+            "OtraPassword123!",
+            actor.Id,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+
+        Assert.Equal(
+            AdministrativeAccessError.Duplicate,
+            second.Error);
+
+        Assert.Equal(
+            1,
+            await dbContext.UsuariosAdministrativos.CountAsync(
+                u => u.NombreUsuario == "duplicado"));
     }
 
     [Fact]
@@ -273,30 +331,130 @@ public class PasswordHashingSecurityTests
         await using var dbContext = new PanyebarDbContext(options);
 
         dbContext.Roles.AddRange(
-            new Rol { Id = 1, Nombre = "Admin", Estado = EstadoRegistro.Activo },
-            new Rol { Id = 2, Nombre = "Auditor", Estado = EstadoRegistro.Activo },
-            new Rol { Id = 3, Nombre = "Operador", Estado = EstadoRegistro.Activo });
+            new Rol
+            {
+                Id = 1,
+                Nombre = "Admin",
+                Estado = EstadoRegistro.Activo
+            },
+            new Rol
+            {
+                Id = 2,
+                Nombre = "Auditor",
+                Estado = EstadoRegistro.Activo
+            },
+            new Rol
+            {
+                Id = 3,
+                Nombre = "Operador",
+                Estado = EstadoRegistro.Activo
+            });
 
-        var user = new UsuarioAdministrativo { Id = 10, NombreUsuario = "admin.sync", PasswordHash = _passwordHashService.Hash("Password123!"), Estado = EstadoRegistro.Activo };
-        dbContext.UsuariosAdministrativos.Add(user);
-        dbContext.UsuarioRoles.Add(new UsuarioRol { UsuarioAdministrativoId = user.Id, RolId = 1 });
-        dbContext.UsuarioRoles.Add(new UsuarioRol { UsuarioAdministrativoId = user.Id, RolId = 3 });
+        var user = new UsuarioAdministrativo
+        {
+            Id = 10,
+            NombreUsuario = "admin.sync",
+            PasswordHash = _passwordHashService.Hash("Password123!"),
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityActor = new UsuarioAdministrativo
+        {
+            Id = 20,
+            NombreUsuario = "security.actor",
+            PasswordHash = _passwordHashService.Hash("Password123!"),
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityRole = new Rol
+        {
+            Id = 100,
+            Nombre = "Security Administrator",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var criticalPermissions = CreateCriticalPermissions(100);
+
+        dbContext.UsuariosAdministrativos.AddRange(
+            user,
+            securityActor);
+
+        dbContext.Roles.Add(securityRole);
+
+        dbContext.Permisos.AddRange(criticalPermissions);
+
+        dbContext.UsuarioRoles.AddRange(
+            new UsuarioRol
+            {
+                UsuarioAdministrativoId = user.Id,
+                RolId = 1
+            },
+            new UsuarioRol
+            {
+                UsuarioAdministrativoId = user.Id,
+                RolId = 3
+            },
+            new UsuarioRol
+            {
+                UsuarioAdministrativoId = securityActor.Id,
+                RolId = securityRole.Id
+            });
+
+        foreach (var permission in criticalPermissions)
+        {
+            dbContext.RolPermisos.Add(
+                new RolPermiso
+                {
+                    RolId = securityRole.Id,
+                    PermisoId = permission.Id
+                });
+        }
+
         await dbContext.SaveChangesAsync();
 
-        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+        var service = new AdministrativeAccessService(
+            dbContext,
+            new PasswordHasherAdapter());
 
-        var assigned = await service.SetRolesForUsuarioAsync(user.Id, new[] { 2, 2, 1 }, CancellationToken.None);
-        Assert.True(assigned);
+        var assigned = await service.SetRolesForUsuarioAsync(
+            user.Id,
+            new[] { 2, 2, 1 },
+            securityActor.Id,
+            CancellationToken.None);
 
-        var userRoles = await dbContext.UsuarioRoles.Where(x => x.UsuarioAdministrativoId == user.Id).OrderBy(x => x.RolId).ToListAsync();
-        Assert.Equal(new[] { 1, 2 }, userRoles.Select(x => x.RolId));
+        Assert.True(assigned.Succeeded);
 
-        var cleared = await service.SetRolesForUsuarioAsync(user.Id, Array.Empty<int>(), CancellationToken.None);
-        Assert.True(cleared);
-        Assert.Empty(await dbContext.UsuarioRoles.Where(x => x.UsuarioAdministrativoId == user.Id).ToListAsync());
+        var userRoles = await dbContext.UsuarioRoles
+            .Where(x =>
+                x.UsuarioAdministrativoId == user.Id)
+            .OrderBy(x => x.RolId)
+            .ToListAsync();
 
-        Assert.Equal(1, await dbContext.UsuariosAdministrativos.CountAsync());
-        Assert.Equal(3, await dbContext.Roles.CountAsync());
+        Assert.Equal(
+            new[] { 1, 2 },
+            userRoles.Select(x => x.RolId));
+
+        var cleared = await service.SetRolesForUsuarioAsync(
+            user.Id,
+            Array.Empty<int>(),
+            securityActor.Id,
+            CancellationToken.None);
+
+        Assert.True(cleared.Succeeded);
+
+        Assert.Empty(
+            await dbContext.UsuarioRoles
+                .Where(x =>
+                    x.UsuarioAdministrativoId == user.Id)
+                .ToListAsync());
+
+        Assert.Equal(
+            2,
+            await dbContext.UsuariosAdministrativos.CountAsync());
+
+        Assert.Equal(
+            4,
+            await dbContext.Roles.CountAsync());
     }
 
     [Fact]
@@ -307,16 +465,77 @@ public class PasswordHashingSecurityTests
             .Options;
 
         await using var dbContext = new PanyebarDbContext(options);
-        dbContext.UsuariosAdministrativos.Add(new UsuarioAdministrativo { Id = 11, NombreUsuario = "estado.user", PasswordHash = _passwordHashService.Hash("Password123!"), Estado = EstadoRegistro.Activo });
+
+        var target = new UsuarioAdministrativo
+        {
+            Id = 11,
+            NombreUsuario = "estado.user",
+            PasswordHash = _passwordHashService.Hash("Password123!"),
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityActor = new UsuarioAdministrativo
+        {
+            Id = 12,
+            NombreUsuario = "estado.actor",
+            PasswordHash = _passwordHashService.Hash("Password123!"),
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityRole = new Rol
+        {
+            Id = 110,
+            Nombre = "Estado Security Admin",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var criticalPermissions = CreateCriticalPermissions(110);
+
+        dbContext.UsuariosAdministrativos.AddRange(
+            target,
+            securityActor);
+
+        dbContext.Roles.Add(securityRole);
+        dbContext.Permisos.AddRange(criticalPermissions);
+
+        dbContext.UsuarioRoles.Add(
+            new UsuarioRol
+            {
+                UsuarioAdministrativoId = securityActor.Id,
+                RolId = securityRole.Id
+            });
+
+        foreach (var permission in criticalPermissions)
+        {
+            dbContext.RolPermisos.Add(
+                new RolPermiso
+                {
+                    RolId = securityRole.Id,
+                    PermisoId = permission.Id
+                });
+        }
+
         await dbContext.SaveChangesAsync();
 
-        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+        var service = new AdministrativeAccessService(
+            dbContext,
+            new PasswordHasherAdapter());
 
-        var result = await service.SetUsuarioEstadoAsync(11, EstadoRegistro.Inactivo, CancellationToken.None);
+        var result = await service.SetUsuarioEstadoAsync(
+            target.Id,
+            EstadoRegistro.Inactivo,
+            securityActor.Id,
+            CancellationToken.None);
 
-        Assert.True(result);
-        var user = await dbContext.UsuariosAdministrativos.SingleAsync(x => x.Id == 11);
-        Assert.Equal(EstadoRegistro.Inactivo, user.Estado);
+        Assert.True(result.Succeeded);
+
+        var user =
+            await dbContext.UsuariosAdministrativos.SingleAsync(
+                x => x.Id == target.Id);
+
+        Assert.Equal(
+            EstadoRegistro.Inactivo,
+            user.Estado);
     }
 
     [Fact]
@@ -328,28 +547,123 @@ public class PasswordHashingSecurityTests
 
         await using var dbContext = new PanyebarDbContext(options);
 
-        var role = new Rol { Id = 4, Nombre = "Supervisor", Estado = EstadoRegistro.Activo };
-        var permiso1 = new Permiso { Id = 1, Codigo = "SEGURIDAD.P1", Nombre = "Permiso 1", Estado = EstadoRegistro.Activo };
-        var permiso2 = new Permiso { Id = 2, Codigo = "SEGURIDAD.P2", Nombre = "Permiso 2", Estado = EstadoRegistro.Activo };
-        dbContext.Roles.Add(role);
-        dbContext.Permisos.AddRange(permiso1, permiso2);
-        dbContext.RolPermisos.Add(new RolPermiso { RolId = role.Id, PermisoId = permiso1.Id });
+        var role = new Rol
+        {
+            Id = 4,
+            Nombre = "Supervisor",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var permiso1 = new Permiso
+        {
+            Id = 1,
+            Codigo = "SEGURIDAD.P1",
+            Nombre = "Permiso 1",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var permiso2 = new Permiso
+        {
+            Id = 2,
+            Codigo = "SEGURIDAD.P2",
+            Nombre = "Permiso 2",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityActor = new UsuarioAdministrativo
+        {
+            Id = 30,
+            NombreUsuario = "permission.actor",
+            PasswordHash = _passwordHashService.Hash("Password123!"),
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityRole = new Rol
+        {
+            Id = 120,
+            Nombre = "Permission Security Admin",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var criticalPermissions = CreateCriticalPermissions(120);
+
+        dbContext.Roles.AddRange(role, securityRole);
+
+        dbContext.Permisos.AddRange(
+            permiso1,
+            permiso2);
+
+        dbContext.Permisos.AddRange(criticalPermissions);
+
+        dbContext.UsuariosAdministrativos.Add(securityActor);
+
+        dbContext.RolPermisos.Add(
+            new RolPermiso
+            {
+                RolId = role.Id,
+                PermisoId = permiso1.Id
+            });
+
+        dbContext.UsuarioRoles.Add(
+            new UsuarioRol
+            {
+                UsuarioAdministrativoId = securityActor.Id,
+                RolId = securityRole.Id
+            });
+
+        foreach (var permission in criticalPermissions)
+        {
+            dbContext.RolPermisos.Add(
+                new RolPermiso
+                {
+                    RolId = securityRole.Id,
+                    PermisoId = permission.Id
+                });
+        }
+
         await dbContext.SaveChangesAsync();
 
-        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+        var service = new AdministrativeAccessService(
+            dbContext,
+            new PasswordHasherAdapter());
 
-        var assigned = await service.SetPermisosForRolAsync(role.Id, new[] { 2, 2, 1 }, CancellationToken.None);
-        Assert.True(assigned);
+        var assigned = await service.SetPermisosForRolAsync(
+            role.Id,
+            new[] { 2, 2, 1 },
+            securityActor.Id,
+            CancellationToken.None);
 
-        var permissions = await dbContext.RolPermisos.Where(x => x.RolId == role.Id).OrderBy(x => x.PermisoId).ToListAsync();
-        Assert.Equal(new[] { 1, 2 }, permissions.Select(x => x.PermisoId));
+        Assert.True(assigned.Succeeded);
 
-        var cleared = await service.SetPermisosForRolAsync(role.Id, Array.Empty<int>(), CancellationToken.None);
-        Assert.True(cleared);
-        Assert.Empty(await dbContext.RolPermisos.Where(x => x.RolId == role.Id).ToListAsync());
+        var permissions = await dbContext.RolPermisos
+            .Where(x => x.RolId == role.Id)
+            .OrderBy(x => x.PermisoId)
+            .ToListAsync();
 
-        Assert.Equal(1, await dbContext.Roles.CountAsync());
-        Assert.Equal(2, await dbContext.Permisos.CountAsync());
+        Assert.Equal(
+            new[] { 1, 2 },
+            permissions.Select(x => x.PermisoId));
+
+        var cleared = await service.SetPermisosForRolAsync(
+            role.Id,
+            Array.Empty<int>(),
+            securityActor.Id,
+            CancellationToken.None);
+
+        Assert.True(cleared.Succeeded);
+
+        Assert.Empty(
+            await dbContext.RolPermisos
+                .Where(x => x.RolId == role.Id)
+                .ToListAsync());
+
+        Assert.Equal(
+            2,
+            await dbContext.Roles.CountAsync());
+
+        Assert.Equal(
+            5,
+            await dbContext.Permisos.CountAsync());
     }
 
     [Fact]
@@ -360,18 +674,104 @@ public class PasswordHashingSecurityTests
             .Options;
 
         await using var dbContext = new PanyebarDbContext(options);
-        dbContext.Roles.Add(new Rol { Id = 20, Nombre = "EstadoRol", Estado = EstadoRegistro.Activo });
+
+        var targetRole = new Rol
+        {
+            Id = 20,
+            Nombre = "EstadoRol",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityActor = new UsuarioAdministrativo
+        {
+            Id = 40,
+            NombreUsuario = "role.actor",
+            PasswordHash = _passwordHashService.Hash("Password123!"),
+            Estado = EstadoRegistro.Activo
+        };
+
+        var securityRole = new Rol
+        {
+            Id = 130,
+            Nombre = "Role Security Admin",
+            Estado = EstadoRegistro.Activo
+        };
+
+        var criticalPermissions = CreateCriticalPermissions(130);
+
+        dbContext.Roles.AddRange(
+            targetRole,
+            securityRole);
+
+        dbContext.UsuariosAdministrativos.Add(securityActor);
+        dbContext.Permisos.AddRange(criticalPermissions);
+
+        dbContext.UsuarioRoles.Add(
+            new UsuarioRol
+            {
+                UsuarioAdministrativoId = securityActor.Id,
+                RolId = securityRole.Id
+            });
+
+        foreach (var permission in criticalPermissions)
+        {
+            dbContext.RolPermisos.Add(
+                new RolPermiso
+                {
+                    RolId = securityRole.Id,
+                    PermisoId = permission.Id
+                });
+        }
+
         await dbContext.SaveChangesAsync();
 
-        var service = new AdministrativeAccessService(dbContext, new PasswordHasherAdapter());
+        var service = new AdministrativeAccessService(
+            dbContext,
+            new PasswordHasherAdapter());
 
-        var result = await service.SetRolEstadoAsync(20, EstadoRegistro.Inactivo, CancellationToken.None);
+        var result = await service.SetRolEstadoAsync(
+            targetRole.Id,
+            EstadoRegistro.Inactivo,
+            securityActor.Id,
+            CancellationToken.None);
 
-        Assert.True(result);
-        var role = await dbContext.Roles.SingleAsync(x => x.Id == 20);
-        Assert.Equal(EstadoRegistro.Inactivo, role.Estado);
+        Assert.True(result.Succeeded);
+
+        var role = await dbContext.Roles
+            .SingleAsync(x => x.Id == targetRole.Id);
+
+        Assert.Equal(
+            EstadoRegistro.Inactivo,
+            role.Estado);
     }
 
+    private static Permiso[] CreateCriticalPermissions(int startId)
+    {
+        return new[]
+        {
+            new Permiso
+            {
+                Id = startId,
+                Codigo = AdministrativePermissionCodes.UsuariosGestionar,
+                Nombre = "Usuarios gestionar",
+                Estado = EstadoRegistro.Activo
+            },
+            new Permiso
+            {
+                Id = startId + 1,
+                Codigo = AdministrativePermissionCodes.RolesGestionar,
+                Nombre = "Roles gestionar",
+                Estado = EstadoRegistro.Activo
+            },
+            new Permiso
+            {
+                Id = startId + 2,
+                Codigo = AdministrativePermissionCodes.PermisosAsignar,
+                Nombre = "Permisos asignar",
+                Estado = EstadoRegistro.Activo
+            }
+        };
+    }
     private sealed class InMemoryAuthenticationRepository : IUsuarioAdministrativoAuthenticationRepository
     {
         private readonly UsuarioAdministrativo? _user;

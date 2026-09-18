@@ -1,3 +1,4 @@
+using Panyebar.Application.AdministracionComite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IFinanzaService, FinanzaService>();
         services.AddScoped<IDashboardReportesService, DashboardReportesService>();
         services.AddScoped<IAbastecimientoService, AbastecimientoService>();
+            services.AddScoped<IAdministracionComiteService, AdministracionComiteService>();
         services.AddScoped<ISuministroNisGenerator, SuministroNisGenerator>();
         services.AddSingleton<ISuministroQrTokenGenerator, SuministroQrTokenGenerator>();
 

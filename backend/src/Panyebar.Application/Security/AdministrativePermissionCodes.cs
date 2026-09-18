@@ -32,4 +32,7 @@ public static class AdministrativePermissionCodes
 
     public const string AbastecimientoVer = "ABASTECIMIENTO.VER";
     public const string AbastecimientoGestionar = "ABASTECIMIENTO.GESTIONAR";
+
+    public const string AdministracionVer = "ADMINISTRACION.VER";
+    public const string AdministracionGestionar = "ADMINISTRACION.GESTIONAR";
 }

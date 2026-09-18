@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Panyebar.Application.Security;
@@ -9,173 +10,292 @@ namespace Panyebar.Api.Controllers;
 [Route("api/admin")]
 public sealed class AdministrativeAccessController : ControllerBase
 {
-    private readonly IAdministrativeAccessService _administrativeAccessService;
+    private readonly IAdministrativeAccessService _service;
 
-    public AdministrativeAccessController(IAdministrativeAccessService administrativeAccessService)
+    public AdministrativeAccessController(
+        IAdministrativeAccessService service)
     {
-        _administrativeAccessService = administrativeAccessService;
+        _service = service;
     }
 
     [HttpGet("usuarios")]
-    [Authorize(Policy = "Permission:SEGURIDAD.USUARIOS.VER")]
-    public async Task<IActionResult> GetUsuarios(CancellationToken cancellationToken)
-    {
-        var usuarios = await _administrativeAccessService.GetUsuariosAsync(cancellationToken);
-        return Ok(usuarios);
-    }
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.UsuariosVer)]
+    public async Task<IActionResult> GetUsuarios(
+        CancellationToken cancellationToken) =>
+        Ok(await _service.GetUsuariosAsync(cancellationToken));
 
     [HttpGet("usuarios/{id:int}")]
-    [Authorize(Policy = "Permission:SEGURIDAD.USUARIOS.VER")]
-    public async Task<IActionResult> GetUsuarioById(int id, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.UsuariosVer)]
+    public async Task<IActionResult> GetUsuarioById(
+        int id,
+        CancellationToken cancellationToken)
     {
-        var usuario = await _administrativeAccessService.GetUsuarioByIdAsync(id, cancellationToken);
-        return usuario is null ? NotFound() : Ok(usuario);
+        var result = await _service.GetUsuarioByIdAsync(id, cancellationToken);
+
+        return result is null
+            ? NotFound(new { message = "Usuario no encontrado." })
+            : Ok(result);
     }
 
     [HttpPost("usuarios")]
-    [Authorize(Policy = "Permission:SEGURIDAD.USUARIOS.GESTIONAR")]
-    public async Task<IActionResult> CreateUsuario([FromBody] CreateUsuarioRequest request, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.UsuariosGestionar)]
+    public async Task<IActionResult> CreateUsuario(
+        [FromBody] CreateUsuarioRequest request,
+        CancellationToken cancellationToken)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.NombreUsuario) || string.IsNullOrWhiteSpace(request.Password))
+        if (!TryGetAuthenticatedUserId(out var actorId))
         {
-            return BadRequest(new { message = "Nombre de usuario y contraseña son requeridos." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario autenticado." });
         }
 
-        var usuario = await _administrativeAccessService.CreateUsuarioAsync(request.NombreUsuario, request.Password, cancellationToken);
+        var result = await _service.CreateUsuarioAsync(
+            request?.NombreUsuario ?? string.Empty,
+            request?.Password ?? string.Empty,
+            actorId,
+            cancellationToken);
 
-        if (usuario is null)
+        return result.Error switch
         {
-            return Conflict(new { message = "El usuario ya existe o los datos son inválidos." });
-        }
+            AdministrativeAccessError.Invalid =>
+                BadRequest(new { message = "El nombre de usuario o la contraseña no son válidos. La contraseña debe tener al menos 8 caracteres." }),
 
-        return CreatedAtAction(nameof(GetUsuarioById), new { id = usuario.Id }, usuario);
+            AdministrativeAccessError.Duplicate =>
+                Conflict(new { message = "Ya existe un usuario con ese nombre." }),
+
+            _ => CreatedAtAction(
+                nameof(GetUsuarioById),
+                new { id = result.Value!.Id },
+                result.Value)
+        };
     }
 
     [HttpPatch("usuarios/{id:int}/estado")]
-    [Authorize(Policy = "Permission:SEGURIDAD.USUARIOS.GESTIONAR")]
-    public async Task<IActionResult> SetUsuarioEstado(int id, [FromBody] UpdateEstadoRequest request, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.UsuariosGestionar)]
+    public async Task<IActionResult> SetUsuarioEstado(
+        int id,
+        [FromBody] UpdateEstadoRequest request,
+        CancellationToken cancellationToken)
     {
-        if (request is null || !Enum.IsDefined(typeof(EstadoRegistro), request.Estado))
+        if (!TryGetAuthenticatedUserId(out var actorId))
         {
-            return BadRequest(new { message = "Estado no válido." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario autenticado." });
         }
 
-        var usuario = await _administrativeAccessService.GetUsuarioByIdAsync(id, cancellationToken);
-        if (usuario is null)
-        {
-            return NotFound(new { message = "Usuario no encontrado." });
-        }
+        var result = await _service.SetUsuarioEstadoAsync(
+            id,
+            request.Estado,
+            actorId,
+            cancellationToken);
 
-        var success = await _administrativeAccessService.SetUsuarioEstadoAsync(id, request.Estado, cancellationToken);
-        return success ? Ok(new { message = "Estado actualizado correctamente." }) : BadRequest(new { message = "No se pudo actualizar el estado del usuario." });
+        return MapUsuarioResult(result,
+            "No puedes desactivar tu propia cuenta ni dejar el sistema sin un administrador funcional.");
     }
 
     [HttpPut("usuarios/{id:int}/roles")]
-    [Authorize(Policy = "Permission:SEGURIDAD.USUARIOS.GESTIONAR")]
-    public async Task<IActionResult> SetUsuarioRoles(int id, [FromBody] UpdateRolesRequest request, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.UsuariosGestionar)]
+    public async Task<IActionResult> SetUsuarioRoles(
+        int id,
+        [FromBody] UpdateRolesRequest request,
+        CancellationToken cancellationToken)
     {
-        if (request is null)
+        if (!TryGetAuthenticatedUserId(out var actorId))
         {
-            return BadRequest(new { message = "La asignación de roles es requerida." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario autenticado." });
         }
 
-        var usuario = await _administrativeAccessService.GetUsuarioByIdAsync(id, cancellationToken);
-        if (usuario is null)
+        var result = await _service.SetRolesForUsuarioAsync(
+            id,
+            request?.RoleIds ?? Array.Empty<int>(),
+            actorId,
+            cancellationToken);
+
+        return MapUsuarioResult(result,
+            "La asignación dejaría el sistema sin un administrador funcional.");
+    }
+
+    [HttpPut("usuarios/{id:int}/password")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.UsuariosGestionar)]
+    public async Task<IActionResult> ResetUsuarioPassword(
+        int id,
+        [FromBody] ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var actorId))
         {
-            return NotFound(new { message = "Usuario no encontrado." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario autenticado." });
         }
 
-        var success = await _administrativeAccessService.SetRolesForUsuarioAsync(id, request.RoleIds, cancellationToken);
-        return success ? Ok(new { message = "Roles actualizados correctamente." }) : BadRequest(new { message = "No se pudieron actualizar los roles." });
+        var result = await _service.ResetUsuarioPasswordAsync(
+            id,
+            request?.NuevaPassword ?? string.Empty,
+            actorId,
+            cancellationToken);
+
+        return MapUsuarioResult(
+            result,
+            "No se pudo restablecer la contraseña.");
     }
 
     [HttpGet("roles")]
-    [Authorize(Policy = "Permission:SEGURIDAD.ROLES.VER")]
-    public async Task<IActionResult> GetRoles(CancellationToken cancellationToken)
-    {
-        var roles = await _administrativeAccessService.GetRolesAsync(cancellationToken);
-        return Ok(roles);
-    }
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.RolesVer)]
+    public async Task<IActionResult> GetRoles(
+        CancellationToken cancellationToken) =>
+        Ok(await _service.GetRolesAsync(cancellationToken));
 
     [HttpGet("roles/{id:int}")]
-    [Authorize(Policy = "Permission:SEGURIDAD.ROLES.VER")]
-    public async Task<IActionResult> GetRolById(int id, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.RolesVer)]
+    public async Task<IActionResult> GetRolById(
+        int id,
+        CancellationToken cancellationToken)
     {
-        var rol = await _administrativeAccessService.GetRolByIdAsync(id, cancellationToken);
-        return rol is null ? NotFound() : Ok(rol);
+        var result = await _service.GetRolByIdAsync(id, cancellationToken);
+
+        return result is null
+            ? NotFound(new { message = "Rol no encontrado." })
+            : Ok(result);
     }
 
     [HttpPost("roles")]
-    [Authorize(Policy = "Permission:SEGURIDAD.ROLES.GESTIONAR")]
-    public async Task<IActionResult> CreateRol([FromBody] CreateRolRequest request, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.RolesGestionar)]
+    public async Task<IActionResult> CreateRol(
+        [FromBody] CreateRolRequest request,
+        CancellationToken cancellationToken)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.Nombre))
+        if (!TryGetAuthenticatedUserId(out var actorId))
         {
-            return BadRequest(new { message = "El nombre del rol es requerido." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario autenticado." });
         }
 
-        var rol = await _administrativeAccessService.CreateRolAsync(request.Nombre, request.Descripcion, cancellationToken);
+        var result = await _service.CreateRolAsync(
+            request?.Nombre ?? string.Empty,
+            request?.Descripcion,
+            actorId,
+            cancellationToken);
 
-        if (rol is null)
+        return result.Error switch
         {
-            return Conflict(new { message = "El rol ya existe o los datos son inválidos." });
-        }
+            AdministrativeAccessError.Invalid =>
+                BadRequest(new { message = "Los datos del rol no son válidos." }),
 
-        return CreatedAtAction(nameof(GetRolById), new { id = rol.Id }, rol);
+            AdministrativeAccessError.Duplicate =>
+                Conflict(new { message = "Ya existe un rol con ese nombre." }),
+
+            _ => CreatedAtAction(
+                nameof(GetRolById),
+                new { id = result.Value!.Id },
+                result.Value)
+        };
     }
 
     [HttpPatch("roles/{id:int}/estado")]
-    [Authorize(Policy = "Permission:SEGURIDAD.ROLES.GESTIONAR")]
-    public async Task<IActionResult> SetRolEstado(int id, [FromBody] UpdateEstadoRequest request, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.RolesGestionar)]
+    public async Task<IActionResult> SetRolEstado(
+        int id,
+        [FromBody] UpdateEstadoRequest request,
+        CancellationToken cancellationToken)
     {
-        if (request is null || !Enum.IsDefined(typeof(EstadoRegistro), request.Estado))
+        if (!TryGetAuthenticatedUserId(out var actorId))
         {
-            return BadRequest(new { message = "Estado no válido." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario autenticado." });
         }
 
-        var rol = await _administrativeAccessService.GetRolByIdAsync(id, cancellationToken);
-        if (rol is null)
-        {
-            return NotFound(new { message = "Rol no encontrado." });
-        }
+        var result = await _service.SetRolEstadoAsync(
+            id,
+            request.Estado,
+            actorId,
+            cancellationToken);
 
-        var success = await _administrativeAccessService.SetRolEstadoAsync(id, request.Estado, cancellationToken);
-        return success ? Ok(new { message = "Estado actualizado correctamente." }) : BadRequest(new { message = "No se pudo actualizar el estado del rol." });
+        return MapRolResult(
+            result,
+            "El cambio dejaría el sistema sin un administrador funcional.");
     }
 
     [HttpPut("roles/{id:int}/permisos")]
-    [Authorize(Policy = "Permission:SEGURIDAD.PERMISOS.ASIGNAR")]
-    public async Task<IActionResult> SetPermisosForRol(int id, [FromBody] UpdatePermisosRequest request, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.PermisosAsignar)]
+    public async Task<IActionResult> SetPermisosForRol(
+        int id,
+        [FromBody] UpdatePermisosRequest request,
+        CancellationToken cancellationToken)
     {
-        if (request is null)
+        if (!TryGetAuthenticatedUserId(out var actorId))
         {
-            return BadRequest(new { message = "La asignación de permisos es requerida." });
+            return Unauthorized(new { message = "No se pudo identificar al usuario autenticado." });
         }
 
-        var rol = await _administrativeAccessService.GetRolByIdAsync(id, cancellationToken);
-        if (rol is null)
-        {
-            return NotFound(new { message = "Rol no encontrado." });
-        }
+        var result = await _service.SetPermisosForRolAsync(
+            id,
+            request?.PermisoIds ?? Array.Empty<int>(),
+            actorId,
+            cancellationToken);
 
-        var success = await _administrativeAccessService.SetPermisosForRolAsync(id, request.PermisoIds, cancellationToken);
-        return success ? Ok(new { message = "Permisos actualizados correctamente." }) : BadRequest(new { message = "No se pudieron actualizar los permisos." });
+        return MapRolResult(
+            result,
+            "La asignación dejaría el sistema sin un administrador funcional.");
     }
 
     [HttpGet("permisos")]
-    [Authorize(Policy = "Permission:SEGURIDAD.PERMISOS.VER")]
-    public async Task<IActionResult> GetPermisos(CancellationToken cancellationToken)
-    {
-        var permisos = await _administrativeAccessService.GetPermisosAsync(cancellationToken);
-        return Ok(permisos);
-    }
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.PermisosVer)]
+    public async Task<IActionResult> GetPermisos(
+        CancellationToken cancellationToken) =>
+        Ok(await _service.GetPermisosAsync(cancellationToken));
 
     [HttpGet("permisos/{id:int}")]
-    [Authorize(Policy = "Permission:SEGURIDAD.PERMISOS.VER")]
-    public async Task<IActionResult> GetPermisoById(int id, CancellationToken cancellationToken)
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.PermisosVer)]
+    public async Task<IActionResult> GetPermisoById(
+        int id,
+        CancellationToken cancellationToken)
     {
-        var permiso = await _administrativeAccessService.GetPermisoByIdAsync(id, cancellationToken);
-        return permiso is null ? NotFound() : Ok(permiso);
+        var result = await _service.GetPermisoByIdAsync(id, cancellationToken);
+
+        return result is null
+            ? NotFound(new { message = "Permiso no encontrado." })
+            : Ok(result);
+    }
+
+    private IActionResult MapUsuarioResult(
+        AdministrativeAccessResult<UsuarioAdministrativoAccessSummary> result,
+        string conflictMessage)
+    {
+        return result.Error switch
+        {
+            AdministrativeAccessError.Invalid =>
+                BadRequest(new { message = "Los datos de la operación no son válidos." }),
+
+            AdministrativeAccessError.NotFound =>
+                NotFound(new { message = "Usuario no encontrado." }),
+
+            AdministrativeAccessError.Conflict =>
+                Conflict(new { message = conflictMessage }),
+
+            _ => Ok(result.Value)
+        };
+    }
+
+    private IActionResult MapRolResult(
+        AdministrativeAccessResult<RolAccessSummary> result,
+        string conflictMessage)
+    {
+        return result.Error switch
+        {
+            AdministrativeAccessError.Invalid =>
+                BadRequest(new { message = "Los datos de la operación no son válidos." }),
+
+            AdministrativeAccessError.NotFound =>
+                NotFound(new { message = "Rol no encontrado." }),
+
+            AdministrativeAccessError.Conflict =>
+                Conflict(new { message = conflictMessage }),
+
+            _ => Ok(result.Value)
+        };
+    }
+
+    private bool TryGetAuthenticatedUserId(out int userId)
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+
+        return int.TryParse(claim, out userId) && userId > 0;
     }
 }
 
@@ -192,7 +312,12 @@ public sealed class UpdateEstadoRequest
 
 public sealed class UpdateRolesRequest
 {
-    public List<int> RoleIds { get; set; } = new();
+    public IEnumerable<int> RoleIds { get; set; } = Array.Empty<int>();
+}
+
+public sealed class ResetPasswordRequest
+{
+    public string NuevaPassword { get; set; } = string.Empty;
 }
 
 public sealed class CreateRolRequest
@@ -203,5 +328,5 @@ public sealed class CreateRolRequest
 
 public sealed class UpdatePermisosRequest
 {
-    public List<int> PermisoIds { get; set; } = new();
+    public IEnumerable<int> PermisoIds { get; set; } = Array.Empty<int>();
 }

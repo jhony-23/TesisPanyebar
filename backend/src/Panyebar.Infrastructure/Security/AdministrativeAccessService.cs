@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Panyebar.Application.Security;
 using Panyebar.Domain.Entities;
@@ -8,16 +9,26 @@ namespace Panyebar.Infrastructure.Security;
 
 public sealed class AdministrativeAccessService : IAdministrativeAccessService
 {
+    private static readonly string[] CriticalAdministrativePermissions =
+    {
+        AdministrativePermissionCodes.UsuariosGestionar,
+        AdministrativePermissionCodes.RolesGestionar,
+        AdministrativePermissionCodes.PermisosAsignar
+    };
+
     private readonly PanyebarDbContext _dbContext;
     private readonly IPasswordHashService _passwordHashService;
 
-    public AdministrativeAccessService(PanyebarDbContext dbContext, IPasswordHashService passwordHashService)
+    public AdministrativeAccessService(
+        PanyebarDbContext dbContext,
+        IPasswordHashService passwordHashService)
     {
         _dbContext = dbContext;
         _passwordHashService = passwordHashService;
     }
 
-    public async Task<IReadOnlyList<UsuarioAdministrativoAccessSummary>> GetUsuariosAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UsuarioAdministrativoAccessSummary>> GetUsuariosAsync(
+        CancellationToken cancellationToken = default)
     {
         return await _dbContext.UsuariosAdministrativos
             .AsNoTracking()
@@ -38,12 +49,20 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
                             r.Nombre,
                             r.Descripcion,
                             r.Estado))
+                    .OrderBy(r => r.Id)
                     .ToList()))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<UsuarioAdministrativoAccessSummary?> GetUsuarioByIdAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<UsuarioAdministrativoAccessSummary?> GetUsuarioByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
+        if (id <= 0)
+        {
+            return null;
+        }
+
         return await _dbContext.UsuariosAdministrativos
             .AsNoTracking()
             .Where(u => u.Id == id)
@@ -63,34 +82,48 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
                             r.Nombre,
                             r.Descripcion,
                             r.Estado))
+                    .OrderBy(r => r.Id)
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<UsuarioAdministrativoAccessSummary?> CreateUsuarioAsync(
+    public async Task<AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>> CreateUsuarioAsync(
         string nombreUsuario,
         string password,
+        int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(nombreUsuario) || string.IsNullOrWhiteSpace(password))
+        var normalizedName = nombreUsuario?.Trim();
+
+        if (actorUsuarioId <= 0 ||
+            string.IsNullOrWhiteSpace(normalizedName) ||
+            normalizedName.Length > 100 ||
+            string.IsNullOrWhiteSpace(password) ||
+            password.Length < 8)
         {
-            return null;
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
 
-        var normalizedNombreUsuario = nombreUsuario.Trim();
-
-        var userExists = await _dbContext.UsuariosAdministrativos
-            .AsNoTracking()
-            .AnyAsync(u => u.NombreUsuario == normalizedNombreUsuario, cancellationToken);
-
-        if (userExists)
+        if (!await ActorExistsAsync(actorUsuarioId, cancellationToken))
         {
-            return null;
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
+
+        if (await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .AnyAsync(
+                u => u.NombreUsuario == normalizedName,
+                cancellationToken))
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Duplicate);
         }
 
         var entity = new UsuarioAdministrativo
         {
-            NombreUsuario = normalizedNombreUsuario,
+            NombreUsuario = normalizedName,
             PasswordHash = _passwordHashService.Hash(password),
             Estado = EstadoRegistro.Activo
         };
@@ -98,95 +131,259 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
         _dbContext.UsuariosAdministrativos.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return await GetUsuarioByIdAsync(entity.Id, cancellationToken);
+        AddAudit(
+            actorUsuarioId,
+            "SEGURIDAD.USUARIO.CREAR",
+            "UsuarioAdministrativo",
+            entity.Id,
+            null,
+            new
+            {
+                entity.Id,
+                entity.NombreUsuario,
+                Estado = entity.Estado.ToString()
+            });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+            .Success((await GetUsuarioByIdAsync(entity.Id, cancellationToken))!);
     }
 
-    public async Task<bool> SetRolesForUsuarioAsync(
+    public async Task<AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>> SetRolesForUsuarioAsync(
         int usuarioAdministrativoId,
         IEnumerable<int> rolIds,
+        int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (usuarioAdministrativoId <= 0)
+        if (usuarioAdministrativoId <= 0 ||
+            actorUsuarioId <= 0 ||
+            rolIds is null)
         {
-            return false;
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
 
-        var requestedRoles = rolIds
-            .Where(id => id > 0)
-            .Distinct()
-            .ToList();
-
         var usuario = await _dbContext.UsuariosAdministrativos
-            .SingleOrDefaultAsync(u => u.Id == usuarioAdministrativoId, cancellationToken);
+            .SingleOrDefaultAsync(
+                u => u.Id == usuarioAdministrativoId,
+                cancellationToken);
 
         if (usuario is null)
         {
-            return false;
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.NotFound);
         }
 
-        var validRoleIds = await _dbContext.Roles
-            .AsNoTracking()
-            .Where(r => r.Estado == EstadoRegistro.Activo)
-            .Select(r => r.Id)
-            .ToListAsync(cancellationToken);
+        if (!await ActorExistsAsync(actorUsuarioId, cancellationToken))
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
 
-        var requestedValidRoles = requestedRoles
-            .Where(id => validRoleIds.Contains(id))
+        var requested = rolIds
+            .Where(id => id > 0)
+            .Distinct()
+            .OrderBy(id => id)
             .ToList();
 
-        if (requestedRoles.Count != requestedValidRoles.Count)
-        {
-            return false;
-        }
-
-        var currentAssignments = await _dbContext.UsuarioRoles
-            .Where(ur => ur.UsuarioAdministrativoId == usuario.Id)
+        var valid = await _dbContext.Roles
+            .AsNoTracking()
+            .Where(r =>
+                requested.Contains(r.Id) &&
+                r.Estado == EstadoRegistro.Activo)
+            .Select(r => r.Id)
+            .OrderBy(id => id)
             .ToListAsync(cancellationToken);
 
-        var currentRoleIds = currentAssignments.Select(ur => ur.RolId).ToHashSet();
-
-        foreach (var usuarioRol in currentAssignments.Where(ur => !requestedValidRoles.Contains(ur.RolId)).ToList())
+        if (requested.Count != valid.Count)
         {
-            _dbContext.UsuarioRoles.Remove(usuarioRol);
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
 
-        foreach (var rolId in requestedValidRoles.Where(id => !currentRoleIds.Contains(id)))
+        var current = await _dbContext.UsuarioRoles
+            .Where(x => x.UsuarioAdministrativoId == usuarioAdministrativoId)
+            .ToListAsync(cancellationToken);
+
+        var previousIds = current
+            .Select(x => x.RolId)
+            .OrderBy(id => id)
+            .ToArray();
+
+        foreach (var assignment in current.Where(x => !valid.Contains(x.RolId)))
+        {
+            _dbContext.UsuarioRoles.Remove(assignment);
+        }
+
+        var currentIds = current.Select(x => x.RolId).ToHashSet();
+
+        foreach (var rolId in valid.Where(id => !currentIds.Contains(id)))
         {
             _dbContext.UsuarioRoles.Add(new UsuarioRol
             {
-                UsuarioAdministrativoId = usuario.Id,
+                UsuarioAdministrativoId = usuarioAdministrativoId,
                 RolId = rolId
             });
         }
 
+        if (!await WouldKeepAdministratorAfterUserRolesAsync(
+            usuarioAdministrativoId,
+            valid,
+            cancellationToken))
+        {
+            foreach (var entry in _dbContext.ChangeTracker
+                .Entries<UsuarioRol>()
+                .Where(e =>
+                    e.Entity.UsuarioAdministrativoId ==
+                    usuarioAdministrativoId))
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Conflict);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return true;
+
+        AddAudit(
+            actorUsuarioId,
+            "SEGURIDAD.USUARIO.ROLES",
+            "UsuarioAdministrativo",
+            usuarioAdministrativoId,
+            new { RolIds = previousIds },
+            new { RolIds = valid });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+            .Success((await GetUsuarioByIdAsync(
+                usuarioAdministrativoId,
+                cancellationToken))!);
     }
 
-    public async Task<bool> SetUsuarioEstadoAsync(
+    public async Task<AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>> SetUsuarioEstadoAsync(
         int usuarioAdministrativoId,
         EstadoRegistro estado,
+        int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (usuarioAdministrativoId <= 0 || !Enum.IsDefined(typeof(EstadoRegistro), estado))
+        if (usuarioAdministrativoId <= 0 ||
+            actorUsuarioId <= 0 ||
+            !Enum.IsDefined(typeof(EstadoRegistro), estado))
         {
-            return false;
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
 
         var usuario = await _dbContext.UsuariosAdministrativos
-            .SingleOrDefaultAsync(u => u.Id == usuarioAdministrativoId, cancellationToken);
+            .SingleOrDefaultAsync(
+                u => u.Id == usuarioAdministrativoId,
+                cancellationToken);
 
         if (usuario is null)
         {
-            return false;
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.NotFound);
+        }
+
+        if (!await ActorExistsAsync(actorUsuarioId, cancellationToken))
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
+
+        if (usuarioAdministrativoId == actorUsuarioId &&
+            estado == EstadoRegistro.Inactivo)
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Conflict);
+        }
+
+        var previous = usuario.Estado;
+
+        if (!await WouldKeepAdministratorAfterUserStateAsync(
+            usuarioAdministrativoId,
+            estado,
+            cancellationToken))
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Conflict);
         }
 
         usuario.Estado = estado;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return true;
+
+        AddAudit(
+            actorUsuarioId,
+            "SEGURIDAD.USUARIO.ESTADO",
+            "UsuarioAdministrativo",
+            usuarioAdministrativoId,
+            new { Estado = previous.ToString() },
+            new { Estado = estado.ToString() });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+            .Success((await GetUsuarioByIdAsync(
+                usuarioAdministrativoId,
+                cancellationToken))!);
     }
 
-    public async Task<IReadOnlyList<RolAccessSummary>> GetRolesAsync(CancellationToken cancellationToken = default)
+    public async Task<AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>> ResetUsuarioPasswordAsync(
+        int usuarioAdministrativoId,
+        string nuevaPassword,
+        int actorUsuarioId,
+        CancellationToken cancellationToken = default)
+    {
+        if (usuarioAdministrativoId <= 0 ||
+            actorUsuarioId <= 0 ||
+            string.IsNullOrWhiteSpace(nuevaPassword) ||
+            nuevaPassword.Length < 8)
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
+
+        var usuario = await _dbContext.UsuariosAdministrativos
+            .SingleOrDefaultAsync(
+                u => u.Id == usuarioAdministrativoId,
+                cancellationToken);
+
+        if (usuario is null)
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.NotFound);
+        }
+
+        if (!await ActorExistsAsync(actorUsuarioId, cancellationToken))
+        {
+            return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
+
+        usuario.PasswordHash = _passwordHashService.Hash(nuevaPassword);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        AddAudit(
+            actorUsuarioId,
+            "SEGURIDAD.USUARIO.PASSWORD.RESTABLECER",
+            "UsuarioAdministrativo",
+            usuarioAdministrativoId,
+            null,
+            new { Restablecida = true });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AdministrativeAccessResult<UsuarioAdministrativoAccessSummary>
+            .Success((await GetUsuarioByIdAsync(
+                usuarioAdministrativoId,
+                cancellationToken))!);
+    }
+
+    public async Task<IReadOnlyList<RolAccessSummary>> GetRolesAsync(
+        CancellationToken cancellationToken = default)
     {
         return await _dbContext.Roles
             .AsNoTracking()
@@ -209,12 +406,20 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
                             p.Nombre,
                             p.Descripcion,
                             p.Estado))
+                    .OrderBy(p => p.Id)
                     .ToList()))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<RolAccessSummary?> GetRolByIdAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<RolAccessSummary?> GetRolByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
+        if (id <= 0)
+        {
+            return null;
+        }
+
         return await _dbContext.Roles
             .AsNoTracking()
             .Where(r => r.Id == id)
@@ -236,114 +441,194 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
                             p.Nombre,
                             p.Descripcion,
                             p.Estado))
+                    .OrderBy(p => p.Id)
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<RolAccessSummary?> CreateRolAsync(
+    public async Task<AdministrativeAccessResult<RolAccessSummary>> CreateRolAsync(
         string nombre,
         string? descripcion,
+        int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(nombre))
+        var normalizedName = nombre?.Trim();
+        var normalizedDescription = string.IsNullOrWhiteSpace(descripcion)
+            ? null
+            : descripcion.Trim();
+
+        if (actorUsuarioId <= 0 ||
+            string.IsNullOrWhiteSpace(normalizedName) ||
+            normalizedName.Length > 100 ||
+            normalizedDescription?.Length > 500)
         {
-            return null;
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
 
-        var normalizedNombre = nombre.Trim();
-
-        var exists = await _dbContext.Roles
-            .AsNoTracking()
-            .AnyAsync(r => r.Nombre == normalizedNombre, cancellationToken);
-
-        if (exists)
+        if (!await ActorExistsAsync(actorUsuarioId, cancellationToken))
         {
-            return null;
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
+
+        if (await _dbContext.Roles
+            .AsNoTracking()
+            .AnyAsync(r => r.Nombre == normalizedName, cancellationToken))
+        {
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Duplicate);
         }
 
         var entity = new Rol
         {
-            Nombre = normalizedNombre,
-            Descripcion = descripcion,
+            Nombre = normalizedName,
+            Descripcion = normalizedDescription,
             Estado = EstadoRegistro.Activo
         };
 
         _dbContext.Roles.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return await GetRolByIdAsync(entity.Id, cancellationToken);
+        AddAudit(
+            actorUsuarioId,
+            "SEGURIDAD.ROL.CREAR",
+            "Rol",
+            entity.Id,
+            null,
+            new
+            {
+                entity.Id,
+                entity.Nombre,
+                entity.Descripcion,
+                Estado = entity.Estado.ToString()
+            });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AdministrativeAccessResult<RolAccessSummary>
+            .Success((await GetRolByIdAsync(entity.Id, cancellationToken))!);
     }
 
-    public async Task<bool> SetPermisosForRolAsync(
+    public async Task<AdministrativeAccessResult<RolAccessSummary>> SetPermisosForRolAsync(
         int rolId,
         IEnumerable<int> permisoIds,
+        int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (rolId <= 0)
+        if (rolId <= 0 ||
+            actorUsuarioId <= 0 ||
+            permisoIds is null)
         {
-            return false;
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
-
-        var requestedPermisos = permisoIds
-            .Where(id => id > 0)
-            .Distinct()
-            .ToList();
 
         var rol = await _dbContext.Roles
             .SingleOrDefaultAsync(r => r.Id == rolId, cancellationToken);
 
         if (rol is null)
         {
-            return false;
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.NotFound);
         }
 
-        var validPermisoIds = await _dbContext.Permisos
-            .AsNoTracking()
-            .Where(p => p.Estado == EstadoRegistro.Activo)
-            .Select(p => p.Id)
-            .ToListAsync(cancellationToken);
+        if (!await ActorExistsAsync(actorUsuarioId, cancellationToken))
+        {
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
 
-        var requestedValidPermisos = requestedPermisos
-            .Where(id => validPermisoIds.Contains(id))
+        var requested = permisoIds
+            .Where(id => id > 0)
+            .Distinct()
+            .OrderBy(id => id)
             .ToList();
 
-        if (requestedPermisos.Count != requestedValidPermisos.Count)
-        {
-            return false;
-        }
-
-        var currentAssignments = await _dbContext.RolPermisos
-            .Where(rp => rp.RolId == rol.Id)
+        var valid = await _dbContext.Permisos
+            .AsNoTracking()
+            .Where(p =>
+                requested.Contains(p.Id) &&
+                p.Estado == EstadoRegistro.Activo)
+            .Select(p => p.Id)
+            .OrderBy(id => id)
             .ToListAsync(cancellationToken);
 
-        var currentPermisoIds = currentAssignments.Select(rp => rp.PermisoId).ToHashSet();
-
-        foreach (var rolPermiso in currentAssignments.Where(rp => !requestedValidPermisos.Contains(rp.PermisoId)).ToList())
+        if (requested.Count != valid.Count)
         {
-            _dbContext.RolPermisos.Remove(rolPermiso);
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
 
-        foreach (var permisoId in requestedValidPermisos.Where(id => !currentPermisoIds.Contains(id)))
+        var current = await _dbContext.RolPermisos
+            .Where(x => x.RolId == rolId)
+            .ToListAsync(cancellationToken);
+
+        var previousIds = current
+            .Select(x => x.PermisoId)
+            .OrderBy(id => id)
+            .ToArray();
+
+        foreach (var assignment in current.Where(x => !valid.Contains(x.PermisoId)))
+        {
+            _dbContext.RolPermisos.Remove(assignment);
+        }
+
+        var currentIds = current.Select(x => x.PermisoId).ToHashSet();
+
+        foreach (var permisoId in valid.Where(id => !currentIds.Contains(id)))
         {
             _dbContext.RolPermisos.Add(new RolPermiso
             {
-                RolId = rol.Id,
+                RolId = rolId,
                 PermisoId = permisoId
             });
         }
 
+        if (!await WouldKeepAdministratorAfterRolePermissionsAsync(
+            rolId,
+            valid,
+            cancellationToken))
+        {
+            foreach (var entry in _dbContext.ChangeTracker
+                .Entries<RolPermiso>()
+                .Where(e => e.Entity.RolId == rolId))
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Conflict);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return true;
+
+        AddAudit(
+            actorUsuarioId,
+            "SEGURIDAD.ROL.PERMISOS",
+            "Rol",
+            rolId,
+            new { PermisoIds = previousIds },
+            new { PermisoIds = valid });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AdministrativeAccessResult<RolAccessSummary>
+            .Success((await GetRolByIdAsync(rolId, cancellationToken))!);
     }
 
-    public async Task<bool> SetRolEstadoAsync(
+    public async Task<AdministrativeAccessResult<RolAccessSummary>> SetRolEstadoAsync(
         int rolId,
         EstadoRegistro estado,
+        int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (rolId <= 0 || !Enum.IsDefined(typeof(EstadoRegistro), estado))
+        if (rolId <= 0 ||
+            actorUsuarioId <= 0 ||
+            !Enum.IsDefined(typeof(EstadoRegistro), estado))
         {
-            return false;
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
         }
 
         var rol = await _dbContext.Roles
@@ -351,19 +636,50 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
 
         if (rol is null)
         {
-            return false;
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.NotFound);
+        }
+
+        if (!await ActorExistsAsync(actorUsuarioId, cancellationToken))
+        {
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Invalid);
+        }
+
+        var previous = rol.Estado;
+
+        if (!await WouldKeepAdministratorAfterRoleStateAsync(
+            rolId,
+            estado,
+            cancellationToken))
+        {
+            return AdministrativeAccessResult<RolAccessSummary>
+                .Failure(AdministrativeAccessError.Conflict);
         }
 
         rol.Estado = estado;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return true;
+
+        AddAudit(
+            actorUsuarioId,
+            "SEGURIDAD.ROL.ESTADO",
+            "Rol",
+            rolId,
+            new { Estado = previous.ToString() },
+            new { Estado = estado.ToString() });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return AdministrativeAccessResult<RolAccessSummary>
+            .Success((await GetRolByIdAsync(rolId, cancellationToken))!);
     }
 
-    public async Task<IReadOnlyList<PermisoSummary>> GetPermisosAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PermisoSummary>> GetPermisosAsync(
+        CancellationToken cancellationToken = default)
     {
         return await _dbContext.Permisos
             .AsNoTracking()
-            .OrderBy(p => p.Id)
+            .OrderBy(p => p.Codigo)
             .Select(p => new PermisoSummary(
                 p.Id,
                 p.Codigo,
@@ -373,8 +689,15 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PermisoSummary?> GetPermisoByIdAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<PermisoSummary?> GetPermisoByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
+        if (id <= 0)
+        {
+            return null;
+        }
+
         return await _dbContext.Permisos
             .AsNoTracking()
             .Where(p => p.Id == id)
@@ -385,5 +708,258 @@ public sealed class AdministrativeAccessService : IAdministrativeAccessService
                 p.Descripcion,
                 p.Estado))
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task<bool> ActorExistsAsync(
+        int actorUsuarioId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .AnyAsync(
+                u =>
+                    u.Id == actorUsuarioId &&
+                    u.Estado == EstadoRegistro.Activo,
+                cancellationToken);
+    }
+
+    private async Task<bool> WouldKeepAdministratorAfterUserRolesAsync(
+        int targetUserId,
+        IReadOnlyCollection<int> futureRoleIds,
+        CancellationToken cancellationToken)
+    {
+        return await HasFunctionalAdministratorAsync(
+            targetUserId,
+            futureRoleIds,
+            null,
+            null,
+            null,
+            null,
+            cancellationToken);
+    }
+
+    private async Task<bool> WouldKeepAdministratorAfterUserStateAsync(
+        int targetUserId,
+        EstadoRegistro futureState,
+        CancellationToken cancellationToken)
+    {
+        return await HasFunctionalAdministratorAsync(
+            targetUserId,
+            null,
+            futureState,
+            null,
+            null,
+            null,
+            cancellationToken);
+    }
+
+    private async Task<bool> WouldKeepAdministratorAfterRolePermissionsAsync(
+        int targetRoleId,
+        IReadOnlyCollection<int> futurePermissionIds,
+        CancellationToken cancellationToken)
+    {
+        return await HasFunctionalAdministratorAsync(
+            null,
+            null,
+            null,
+            targetRoleId,
+            futurePermissionIds,
+            null,
+            cancellationToken);
+    }
+
+    private async Task<bool> WouldKeepAdministratorAfterRoleStateAsync(
+        int targetRoleId,
+        EstadoRegistro futureState,
+        CancellationToken cancellationToken)
+    {
+        return await HasFunctionalAdministratorAsync(
+            null,
+            null,
+            null,
+            targetRoleId,
+            null,
+            futureState,
+            cancellationToken);
+    }
+
+    private async Task<bool> HasFunctionalAdministratorAsync(
+        int? overriddenUserId,
+        IReadOnlyCollection<int>? overriddenUserRoleIds,
+        EstadoRegistro? overriddenUserState,
+        int? overriddenRoleId,
+        IReadOnlyCollection<int>? overriddenRolePermissionIds,
+        EstadoRegistro? overriddenRoleState,
+        CancellationToken cancellationToken)
+    {
+        var criticalPermissions = await _dbContext.Permisos
+            .AsNoTracking()
+            .Where(p =>
+                p.Estado == EstadoRegistro.Activo &&
+                CriticalAdministrativePermissions.Contains(p.Codigo))
+            .Select(p => new
+            {
+                p.Id,
+                p.Codigo
+            })
+            .ToListAsync(cancellationToken);
+
+        if (criticalPermissions
+            .Select(p => p.Codigo)
+            .Distinct()
+            .Count() != CriticalAdministrativePermissions.Length)
+        {
+            return false;
+        }
+
+        var criticalIds = criticalPermissions
+            .Select(p => p.Id)
+            .ToHashSet();
+
+        var users = await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .Select(u => new
+            {
+                u.Id,
+                u.Estado
+            })
+            .ToListAsync(cancellationToken);
+
+        var roles = await _dbContext.Roles
+            .AsNoTracking()
+            .Select(r => new
+            {
+                r.Id,
+                r.Estado
+            })
+            .ToListAsync(cancellationToken);
+
+        var userRoles = await _dbContext.UsuarioRoles
+            .AsNoTracking()
+            .Select(ur => new
+            {
+                ur.UsuarioAdministrativoId,
+                ur.RolId
+            })
+            .ToListAsync(cancellationToken);
+
+        var rolePermissions = await _dbContext.RolPermisos
+            .AsNoTracking()
+            .Select(rp => new
+            {
+                rp.RolId,
+                rp.PermisoId
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var user in users)
+        {
+            var userState =
+                overriddenUserId == user.Id &&
+                overriddenUserState.HasValue
+                    ? overriddenUserState.Value
+                    : user.Estado;
+
+            if (userState != EstadoRegistro.Activo)
+            {
+                continue;
+            }
+
+            IReadOnlyCollection<int> roleIds;
+
+            if (overriddenUserId == user.Id &&
+                overriddenUserRoleIds is not null)
+            {
+                roleIds = overriddenUserRoleIds;
+            }
+            else
+            {
+                roleIds = userRoles
+                    .Where(x =>
+                        x.UsuarioAdministrativoId == user.Id)
+                    .Select(x => x.RolId)
+                    .Distinct()
+                    .ToArray();
+            }
+
+            var grantedCriticalIds = new HashSet<int>();
+
+            foreach (var roleId in roleIds)
+            {
+                var persistedRole = roles
+                    .SingleOrDefault(r => r.Id == roleId);
+
+                if (persistedRole is null)
+                {
+                    continue;
+                }
+
+                var roleState =
+                    overriddenRoleId == roleId &&
+                    overriddenRoleState.HasValue
+                        ? overriddenRoleState.Value
+                        : persistedRole.Estado;
+
+                if (roleState != EstadoRegistro.Activo)
+                {
+                    continue;
+                }
+
+                IReadOnlyCollection<int> permissionIds;
+
+                if (overriddenRoleId == roleId &&
+                    overriddenRolePermissionIds is not null)
+                {
+                    permissionIds =
+                        overriddenRolePermissionIds;
+                }
+                else
+                {
+                    permissionIds = rolePermissions
+                        .Where(x => x.RolId == roleId)
+                        .Select(x => x.PermisoId)
+                        .Distinct()
+                        .ToArray();
+                }
+
+                foreach (var permissionId in permissionIds)
+                {
+                    if (criticalIds.Contains(permissionId))
+                    {
+                        grantedCriticalIds.Add(permissionId);
+                    }
+                }
+            }
+
+            if (criticalIds.All(grantedCriticalIds.Contains))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private void AddAudit(
+        int actorUsuarioId,
+        string action,
+        string entity,
+        int entityId,
+        object? previous,
+        object? current)
+    {
+        _dbContext.Auditorias.Add(new Auditoria
+        {
+            UsuarioAdministrativoId = actorUsuarioId,
+            Accion = action,
+            Entidad = entity,
+            EntidadId = entityId,
+            Fecha = DateTime.UtcNow,
+            ValorAnterior = previous is null
+                ? null
+                : JsonSerializer.Serialize(previous),
+            ValorNuevo = current is null
+                ? null
+                : JsonSerializer.Serialize(current)
+        });
     }
 }
