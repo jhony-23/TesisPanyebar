@@ -12,6 +12,7 @@ using Panyebar.Application.Obligaciones;
 using Panyebar.Application.Pagos;
 using Panyebar.Application.Jornadas;
 using Panyebar.Application.Finanzas;
+using Panyebar.Application.DashboardReportes;
 using Panyebar.Infrastructure.Persistence;
 using Panyebar.Infrastructure.Security;
 
@@ -48,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IPagoService, PagoService>();
         services.AddScoped<IJornadaService, JornadaService>();
         services.AddScoped<IFinanzaService, FinanzaService>();
+        services.AddScoped<IDashboardReportesService, DashboardReportesService>();
         services.AddScoped<ISuministroNisGenerator, SuministroNisGenerator>();
         services.AddSingleton<ISuministroQrTokenGenerator, SuministroQrTokenGenerator>();
 
