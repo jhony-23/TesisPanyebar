@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -12,7 +13,8 @@ import { formatCivilDate, formatGuatemalaDateTime } from '../utils/dateTime.js'
 const initialForm = { cuotaId: '', suministroId: '', periodo: '', fechaVencimiento: '' }
 
 function ObligacionesPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.OBLIGACIONES_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [obligaciones, setObligaciones] = useState([])
   const [cuotas, setCuotas] = useState([])
@@ -144,7 +146,7 @@ function ObligacionesPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        action={<button className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60" disabled={generationUnavailable} onClick={openGenerate} type="button">Generar obligación</button>}
+        action={canManage ? <button className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60" disabled={generationUnavailable} onClick={openGenerate} type="button">Generar obligación</button> : null}
         description="Consulta las deudas históricas de los suministros y administra las obligaciones generadas desde cuotas."
         eyebrow="Gestión financiera"
         title="Obligaciones"
@@ -154,7 +156,7 @@ function ObligacionesPage() {
       {referenceError && <Alert message={referenceError} />}
       {feedback && <SuccessAlert message={feedback} />}
 
-      {isGenerateOpen && (
+      {canManage && isGenerateOpen && (
         <Panel>
           <div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold text-slate-900">Generar desde cuota</h2><p className="mt-1 text-sm leading-6 text-slate-500">La obligación se asignará al suministro y el backend congelará el monto de la cuota.</p></div><button aria-label="Cerrar formulario de generación" className="rounded-md px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100" disabled={isSaving} onClick={closeGenerate} type="button">Cerrar</button></div>
           <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={generateObligation}>
@@ -176,7 +178,7 @@ function ObligacionesPage() {
         </div>
       </Panel>
 
-      {pendingAnnulment && <AnnulmentDialog isSaving={isSaving} obligation={pendingAnnulment} onCancel={() => setPendingAnnulment(null)} onConfirm={annulObligation} supply={supplyById.get(pendingAnnulment.suministroId)} />}
+      {canManage && pendingAnnulment && <AnnulmentDialog isSaving={isSaving} obligation={pendingAnnulment} onCancel={() => setPendingAnnulment(null)} onConfirm={annulObligation} supply={supplyById.get(pendingAnnulment.suministroId)} />}
     </div>
   )
 }
@@ -218,7 +220,9 @@ function ObligationStatusBadge({ estado }) {
 }
 
 function ObligationActions({ isSaving, obligation, onAnnul }) {
+  const { hasPermission } = useAuth()
   if (obligation.estado !== 1) return <span className="text-xs text-slate-400">Sin acciones disponibles</span>
+  if (!hasPermission(PERMISOS.OBLIGACIONES_GESTIONAR)) return null
   return <button className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} onClick={() => onAnnul(obligation)} type="button">Anular</button>
 }
 

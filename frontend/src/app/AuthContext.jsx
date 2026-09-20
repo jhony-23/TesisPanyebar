@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { AuthContext } from './authContext.js'
 import { authService } from '../services/authService.js'
 import { httpClient } from '../services/httpClient.js'
@@ -34,11 +34,30 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const permissionsSet = useMemo(() => {
+    return new Set(Array.isArray(user?.permisos) ? user.permisos : [])
+  }, [user])
+
+  const hasPermission = useCallback(
+    (code) => Boolean(code && permissionsSet.has(code)),
+    [permissionsSet],
+  )
+
+  const hasAnyPermission = useCallback(
+    (codes) => {
+      if (!codes || codes.length === 0) return true
+      return codes.some((code) => permissionsSet.has(code))
+    },
+    [permissionsSet],
+  )
+
   return (
     <AuthContext.Provider
       value={{
         accessToken,
         authenticatedRequest,
+        hasAnyPermission,
+        hasPermission,
         isAuthenticated: Boolean(accessToken && user),
         isInitializing,
         login,

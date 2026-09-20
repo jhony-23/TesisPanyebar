@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -14,7 +15,8 @@ import {
 const initialForm = { nombre: '', descripcion: '' }
 
 function SectoresPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.SECTORES_GESTIONAR)
   const authenticatedRequestRef = useRef(authenticatedRequest)
   const [sectores, setSectores] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -121,7 +123,7 @@ function SectoresPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        action={(
+        action={canManage ? (
           <button
             className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2"
             onClick={startCreate}
@@ -129,7 +131,7 @@ function SectoresPage() {
           >
             Nuevo sector
           </button>
-        )}
+        ) : null}
         description="Administra los sectores que organizan territorialmente el servicio de agua potable."
         eyebrow="Catálogo territorial"
         title="Sectores"
@@ -153,6 +155,7 @@ function SectoresPage() {
               />
             ) : (
               <SectorList
+                canManage={canManage}
                 isSaving={isSaving}
                 onEdit={startEdit}
                 onRequestStatusChange={setPendingStatusChange}
@@ -162,7 +165,8 @@ function SectoresPage() {
           </div>
         </Panel>
 
-        <Panel className="h-fit xl:sticky xl:top-28">
+        {canManage && (
+          <Panel className="h-fit xl:sticky xl:top-28">
           <h2 className="text-base font-semibold text-slate-900">{editingId === null ? 'Crear sector' : 'Editar sector'}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
             {editingId === null ? 'Añade un sector al catálogo administrable.' : 'Actualiza el nombre o la descripción del sector.'}
@@ -206,7 +210,8 @@ function SectoresPage() {
               </button>
             </div>
           </form>
-        </Panel>
+          </Panel>
+        )}
       </div>
 
       {pendingStatusChange && (
@@ -222,7 +227,7 @@ function SectoresPage() {
   )
 }
 
-function SectorList({ isSaving, onEdit, onRequestStatusChange, sectores }) {
+function SectorList({ canManage, isSaving, onEdit, onRequestStatusChange, sectores }) {
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
@@ -232,12 +237,13 @@ function SectorList({ isSaving, onEdit, onRequestStatusChange, sectores }) {
               <th className="pb-3 pr-4 font-semibold">Nombre</th>
               <th className="pb-3 pr-4 font-semibold">Descripción</th>
               <th className="pb-3 pr-4 font-semibold">Estado</th>
-              <th className="pb-3 text-right font-semibold">Acciones</th>
+              {canManage && <th className="pb-3 text-right font-semibold">Acciones</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {sectores.map((sector) => (
               <SectorRow
+                canManage={canManage}
                 isSaving={isSaving}
                 key={sector.id}
                 onEdit={onEdit}
@@ -251,6 +257,7 @@ function SectorList({ isSaving, onEdit, onRequestStatusChange, sectores }) {
       <div className="space-y-3 md:hidden">
         {sectores.map((sector) => (
           <SectorCard
+            canManage={canManage}
             isSaving={isSaving}
             key={sector.id}
             onEdit={onEdit}
@@ -263,25 +270,27 @@ function SectorList({ isSaving, onEdit, onRequestStatusChange, sectores }) {
   )
 }
 
-function SectorRow({ isSaving, onEdit, onRequestStatusChange, sector }) {
+function SectorRow({ canManage, isSaving, onEdit, onRequestStatusChange, sector }) {
   return (
     <tr>
       <td className="max-w-48 py-4 pr-4 font-semibold text-slate-900">{sector.nombre}</td>
       <td className="max-w-xs py-4 pr-4 text-slate-600">{sector.descripcion || <span className="text-slate-400">Sin descripción</span>}</td>
       <td className="py-4 pr-4"><StatusBadge estado={sector.estado} /></td>
-      <td className="py-4 text-right">
-        <SectorActions
-          isSaving={isSaving}
-          onEdit={onEdit}
-          onRequestStatusChange={onRequestStatusChange}
-          sector={sector}
-        />
-      </td>
+      {canManage && (
+        <td className="py-4 text-right">
+          <SectorActions
+            isSaving={isSaving}
+            onEdit={onEdit}
+            onRequestStatusChange={onRequestStatusChange}
+            sector={sector}
+          />
+        </td>
+      )}
     </tr>
   )
 }
 
-function SectorCard({ isSaving, onEdit, onRequestStatusChange, sector }) {
+function SectorCard({ canManage, isSaving, onEdit, onRequestStatusChange, sector }) {
   return (
     <article className="rounded-md border border-slate-200 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -293,14 +302,16 @@ function SectorCard({ isSaving, onEdit, onRequestStatusChange, sector }) {
         </div>
         <StatusBadge estado={sector.estado} />
       </div>
-      <div className="mt-4 border-t border-slate-100 pt-3">
-        <SectorActions
-          isSaving={isSaving}
-          onEdit={onEdit}
-          onRequestStatusChange={onRequestStatusChange}
-          sector={sector}
-        />
-      </div>
+      {canManage && (
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <SectorActions
+            isSaving={isSaving}
+            onEdit={onEdit}
+            onRequestStatusChange={onRequestStatusChange}
+            sector={sector}
+          />
+        </div>
+      )}
     </article>
   )
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -29,7 +30,8 @@ const initialForm = {
 }
 
 function JornadasPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.JORNADAS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
 
   const [jornadas, setJornadas] = useState([])
@@ -324,7 +326,7 @@ function JornadasPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        action={(
+        action={canManage ? (
           <button
             className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33]"
             onClick={resetForm}
@@ -332,7 +334,7 @@ function JornadasPage() {
           >
             Nueva jornada
           </button>
-        )}
+        ) : null}
         description="Programa jornadas comunitarias, registra participantes y asistencia, y cierra la actividad para generar las obligaciones que correspondan."
         eyebrow="Gestión comunitaria"
         title="Jornadas"
@@ -370,7 +372,8 @@ function JornadasPage() {
           </div>
         </Panel>
 
-        <Panel className="h-fit xl:sticky xl:top-28">
+        {canManage && (
+          <Panel className="h-fit xl:sticky xl:top-28">
           <h2 className="text-base font-semibold text-slate-900">
             {editingId === null ? 'Crear jornada' : 'Editar jornada'}
           </h2>
@@ -483,7 +486,8 @@ function JornadasPage() {
               </button>
             </div>
           </form>
-        </Panel>
+          </Panel>
+        )}
       </div>
 
       {isDetailLoading && <Panel><LoadingState message="Cargando detalle..." /></Panel>}
@@ -491,6 +495,7 @@ function JornadasPage() {
       {selected && !isDetailLoading && (
         <JornadaDetail
           availablePersonas={availablePersonas}
+          canManage={canManage}
           isSaving={isSaving}
           jornada={selected}
           onAddParticipant={addParticipant}
@@ -503,7 +508,7 @@ function JornadasPage() {
         />
       )}
 
-      {pendingCancel && selected && (
+      {canManage && pendingCancel && selected && (
         <CancelDialog
           isSaving={isSaving}
           jornada={selected}
@@ -512,7 +517,7 @@ function JornadasPage() {
         />
       )}
 
-      {pendingClose && selected && (
+      {canManage && pendingClose && selected && (
         <CloseDialog
           isSaving={isSaving}
           jornada={selected}
@@ -527,6 +532,8 @@ function JornadasPage() {
 const inputClass = 'mt-1.5 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20 disabled:cursor-not-allowed disabled:bg-slate-100'
 
 function JornadaList({ jornadas, onEdit, onOpen }) {
+  const { hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.JORNADAS_GESTIONAR)
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
@@ -557,7 +564,7 @@ function JornadaList({ jornadas, onEdit, onOpen }) {
                 <td className="py-4">
                   <div className="flex justify-end gap-2">
                     <button className={secondaryButton} onClick={() => onOpen(jornada.id)} type="button">Gestionar</button>
-                    {jornada.estado === 1 && <button className={secondaryButton} onClick={() => onEdit(jornada)} type="button">Editar</button>}
+                    {canManage && jornada.estado === 1 && <button className={secondaryButton} onClick={() => onEdit(jornada)} type="button">Editar</button>}
                   </div>
                 </td>
               </tr>
@@ -586,7 +593,7 @@ function JornadaList({ jornadas, onEdit, onOpen }) {
             </dl>
             <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
               <button className={secondaryButton} onClick={() => onOpen(jornada.id)} type="button">Gestionar</button>
-              {jornada.estado === 1 && <button className={secondaryButton} onClick={() => onEdit(jornada)} type="button">Editar</button>}
+              {canManage && jornada.estado === 1 && <button className={secondaryButton} onClick={() => onEdit(jornada)} type="button">Editar</button>}
             </div>
           </article>
         ))}
@@ -597,6 +604,7 @@ function JornadaList({ jornadas, onEdit, onOpen }) {
 
 function JornadaDetail({
   availablePersonas,
+  canManage,
   isSaving,
   jornada,
   onAddParticipant,
@@ -627,7 +635,7 @@ function JornadaDetail({
           </p>
         </div>
 
-        {planificada && (
+        {canManage && planificada && (
           <div className="flex flex-wrap gap-2">
             <button className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50" disabled={isSaving} onClick={onCancel} type="button">Cancelar jornada</button>
             <button className="rounded-md bg-[#123b43] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={isSaving} onClick={onClose} type="button">Cerrar jornada</button>
@@ -644,7 +652,7 @@ function JornadaDetail({
         />
       </div>
 
-      {planificada && (
+      {canManage && planificada && (
         <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 p-4">
           <label className="text-sm font-medium text-slate-700" htmlFor="jornada-participante">
             Agregar participante
@@ -689,6 +697,7 @@ function JornadaDetail({
           <div className="mt-4 space-y-3">
             {jornada.participantes.map((participant) => (
               <ParticipantCard
+                canManage={canManage}
                 isSaving={isSaving}
                 key={participant.id}
                 onChange={onParticipantChange}
@@ -704,7 +713,7 @@ function JornadaDetail({
   )
 }
 
-function ParticipantCard({ isSaving, onChange, onRemove, participant, planificada }) {
+function ParticipantCard({ canManage, isSaving, onChange, onRemove, participant, planificada }) {
   const [resultado, setResultado] = useState(String(participant.resultado))
   const [observacion, setObservacion] = useState(participant.observacion || '')
 
@@ -724,7 +733,7 @@ function ParticipantCard({ isSaving, onChange, onRemove, participant, planificad
           </div>
         </div>
 
-        {planificada ? (
+        {canManage && planificada ? (
           <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[12rem_minmax(0,1fr)_auto]">
             <select
               className={`${inputClass} mt-0`}

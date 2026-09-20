@@ -4,6 +4,8 @@ import { AuthProvider } from './app/AuthContext.jsx'
 import AdminLayout from './components/AdminLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import PublicOnlyRoute from './components/PublicOnlyRoute.jsx'
+import PermissionRoute from './components/PermissionRoute.jsx'
+import { ADMIN_MODULE_PERMISSIONS, PERMISOS } from './app/permissions.js'
 import AdminPage from './pages/AdminPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -21,6 +23,7 @@ import SectoresPage from './pages/SectoresPage.jsx'
 import SolicitudesNuevoServicioPage from './pages/SolicitudesNuevoServicioPage.jsx'
 import SuministrosPage from './pages/SuministrosPage.jsx'
 import SuministroQrPage from './pages/SuministroQrPage.jsx'
+
 const AdministracionPage = lazy(
   () => import('./pages/AdministracionPage'),
 )
@@ -37,31 +40,132 @@ function App() {
               <Route element={<LoginPage />} path="/login" />
             </Route>
           </Route>
+
           <Route element={<ProtectedRoute />}>
             <Route element={<AdminLayout />}>
               <Route element={<AdminPage />} path="/admin" />
-              <Route element={<PersonasPage />} path="/admin/personas" />
-              <Route element={<SectoresPage />} path="/admin/sectores" />
-              <Route element={<SuministrosPage />} path="/admin/suministros" />
-              <Route element={<SolicitudesNuevoServicioPage />} path="/admin/solicitudes" />
-              <Route element={<CuotasPage />} path="/admin/cuotas" />
-              <Route element={<ObligacionesPage />} path="/admin/obligaciones" />
-              <Route element={<PagosPage />} path="/admin/pagos" />
-              <Route element={<FinanzasPage />} path="/admin/finanzas" />
-              <Route element={<DashboardPage />} path="/admin/dashboard" />
-              <Route element={<ReportesPage />} path="/admin/reportes" />
-              <Route element={<JornadasPage />} path="/admin/jornadas" />
-              <Route element={<AbastecimientoPage />} path="/admin/abastecimiento" />
+
               <Route
                 element={
-                  <Suspense fallback={<AdministracionLoading />}>
-                    <AdministracionPage />
-                  </Suspense>
+                  <PermissionRoute permissions={[PERMISOS.PERSONAS_VER, PERMISOS.PERSONAS_GESTIONAR]}>
+                    <PersonasPage />
+                  </PermissionRoute>
+                }
+                path="/admin/personas"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.SECTORES_VER, PERMISOS.SECTORES_GESTIONAR]}>
+                    <SectoresPage />
+                  </PermissionRoute>
+                }
+                path="/admin/sectores"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.SUMINISTROS_VER, PERMISOS.SUMINISTROS_GESTIONAR]}>
+                    <SuministrosPage />
+                  </PermissionRoute>
+                }
+                path="/admin/suministros"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.SUMINISTROS_VER, PERMISOS.SUMINISTROS_GESTIONAR]}>
+                    <SolicitudesNuevoServicioPage />
+                  </PermissionRoute>
+                }
+                path="/admin/solicitudes"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.CUOTAS_VER, PERMISOS.CUOTAS_GESTIONAR]}>
+                    <CuotasPage />
+                  </PermissionRoute>
+                }
+                path="/admin/cuotas"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.OBLIGACIONES_VER, PERMISOS.OBLIGACIONES_GESTIONAR]}>
+                    <ObligacionesPage />
+                  </PermissionRoute>
+                }
+                path="/admin/obligaciones"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.JORNADAS_VER, PERMISOS.JORNADAS_GESTIONAR]}>
+                    <JornadasPage />
+                  </PermissionRoute>
+                }
+                path="/admin/jornadas"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.PAGOS_VER, PERMISOS.PAGOS_GESTIONAR]}>
+                    <PagosPage />
+                  </PermissionRoute>
+                }
+                path="/admin/pagos"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.FINANZAS_VER, PERMISOS.FINANZAS_GESTIONAR]}>
+                    <FinanzasPage />
+                  </PermissionRoute>
+                }
+                path="/admin/finanzas"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.DASHBOARD_VER]}>
+                    <DashboardPage />
+                  </PermissionRoute>
+                }
+                path="/admin/dashboard"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.REPORTES_VER]}>
+                    <ReportesPage />
+                  </PermissionRoute>
+                }
+                path="/admin/reportes"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={[PERMISOS.ABASTECIMIENTO_VER, PERMISOS.ABASTECIMIENTO_GESTIONAR]}>
+                    <AbastecimientoPage />
+                  </PermissionRoute>
+                }
+                path="/admin/abastecimiento"
+              />
+
+              <Route
+                element={
+                  <PermissionRoute permissions={ADMIN_MODULE_PERMISSIONS}>
+                    <Suspense fallback={<AdministracionLoading />}>
+                      <AdministracionPage />
+                    </Suspense>
+                  </PermissionRoute>
                 }
                 path="/admin/administracion"
               />
             </Route>
           </Route>
+
           <Route element={<NotFoundPage />} path="*" />
         </Routes>
       </BrowserRouter>
@@ -75,7 +179,9 @@ function PublicLayout() {
       <header className="border-b border-slate-200 bg-white">
         <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link className="font-semibold text-slate-900" to="/">Panyebar</Link>
-          <Link className="text-sm text-slate-600 hover:text-slate-900" to="/login">Acceso administrativo</Link>
+          <Link className="text-sm text-slate-600 hover:text-slate-900" to="/login">
+            Acceso administrativo
+          </Link>
         </nav>
       </header>
       <Outlet />
@@ -93,4 +199,5 @@ function AdministracionLoading() {
     </div>
   )
 }
+
 export default App

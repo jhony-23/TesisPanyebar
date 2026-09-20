@@ -81,7 +81,7 @@ public sealed class AdministracionComiteService : IAdministracionComiteService
         int id,
         CancellationToken cancellationToken = default)
     {
-        if (id <= 0)
+        if (id < 0)
         {
             return null;
         }
@@ -167,8 +167,15 @@ public sealed class AdministracionComiteService : IAdministracionComiteService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var created = await GetByIdAsync(entity.Id, cancellationToken);
+        if (created is null)
+        {
+            return AdministracionComiteResult<AdministracionComiteSummary>
+                .Failure(AdministracionComiteError.Invalid);
+        }
+
         return AdministracionComiteResult<AdministracionComiteSummary>
-            .Success((await GetByIdAsync(entity.Id, cancellationToken))!);
+            .Success(created);
     }
 
     public async Task<AdministracionComiteResult<AdministracionComiteSummary>> SetIntegranteAsync(
@@ -177,10 +184,10 @@ public sealed class AdministracionComiteService : IAdministracionComiteService
         int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (administracionId <= 0 ||
+        if (administracionId < 0 ||
             input is null ||
             input.PersonaId <= 0 ||
-            input.CargoId <= 0 ||
+            input.CargoId < 0 ||
             actorUsuarioId <= 0)
         {
             return AdministracionComiteResult<AdministracionComiteSummary>
@@ -291,10 +298,15 @@ public sealed class AdministracionComiteService : IAdministracionComiteService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var updated = await GetByIdAsync(administracionId, cancellationToken);
+        if (updated is null)
+        {
+            return AdministracionComiteResult<AdministracionComiteSummary>
+                .Failure(AdministracionComiteError.NotFound);
+        }
+
         return AdministracionComiteResult<AdministracionComiteSummary>
-            .Success((await GetByIdAsync(
-                administracionId,
-                cancellationToken))!);
+            .Success(updated);
     }
 
     public async Task<AdministracionComiteResult<AdministracionComiteSummary>> FinishAsync(
@@ -303,7 +315,7 @@ public sealed class AdministracionComiteService : IAdministracionComiteService
         int actorUsuarioId,
         CancellationToken cancellationToken = default)
     {
-        if (administracionId <= 0 ||
+        if (administracionId < 0 ||
             fechaFin == default ||
             actorUsuarioId <= 0)
         {
@@ -368,10 +380,15 @@ public sealed class AdministracionComiteService : IAdministracionComiteService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var finished = await GetByIdAsync(administracionId, cancellationToken);
+        if (finished is null)
+        {
+            return AdministracionComiteResult<AdministracionComiteSummary>
+                .Failure(AdministracionComiteError.NotFound);
+        }
+
         return AdministracionComiteResult<AdministracionComiteSummary>
-            .Success((await GetByIdAsync(
-                administracionId,
-                cancellationToken))!);
+            .Success(finished);
     }
 
     private async Task<bool> ActorExistsAsync(

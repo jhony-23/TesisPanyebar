@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -49,7 +50,8 @@ function emptyForm(date = guatemalaToday()) {
 }
 
 function AbastecimientoPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.ABASTECIMIENTO_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
 
   const [cursor, setCursor] = useState(() => {
@@ -317,11 +319,11 @@ function AbastecimientoPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       <PageHeader
-        actions={(
+        actions={canManage ? (
           <button className={primaryButton} onClick={() => openNew()} type="button">
             + Nueva programación
           </button>
-        )}
+        ) : null}
         description="Organiza los días y horarios de distribución de agua potable por sector."
         eyebrow="Calendario administrativo"
         title="Abastecimiento"
@@ -414,13 +416,13 @@ function AbastecimientoPage() {
               days={calendarDays}
               eventsByDate={eventsByDate}
               month={cursor.month}
-              onDayClick={openNew}
+              onDayClick={canManage ? openNew : undefined}
               onEventClick={setDetail}
             />
           ) : (
             <AgendaView
               events={rows}
-              onDayClick={openNew}
+              onDayClick={canManage ? openNew : undefined}
               onEventClick={setDetail}
             />
           )}
@@ -438,7 +440,7 @@ function AbastecimientoPage() {
         </div>
       </Panel>
 
-      {editor && (
+      {canManage && editor && (
         <ScheduleEditorDialog
           editor={editor}
           isSaving={isSaving}
@@ -450,6 +452,7 @@ function AbastecimientoPage() {
 
       {detail && (
         <DetailDialog
+          canManage={canManage}
           onCancel={() => setConfirmation({
             type: 'cancel',
             row: detail,
@@ -465,7 +468,7 @@ function AbastecimientoPage() {
         />
       )}
 
-      {confirmation && (
+      {canManage && confirmation && (
         <StateDialog
           confirmation={confirmation}
           isSaving={isSaving}
@@ -810,7 +813,7 @@ function ScheduleEditorDialog({ editor, isSaving, onCancel, onSave, sectors }) {
   )
 }
 
-function DetailDialog({ onCancel, onClose, onComplete, onEdit, row }) {
+function DetailDialog({ canManage, onCancel, onClose, onComplete, onEdit, row }) {
   const active = row.estado === 'Programado'
 
   return (
@@ -837,7 +840,7 @@ function DetailDialog({ onCancel, onClose, onComplete, onEdit, row }) {
           </div>
         )}
 
-        {active ? (
+        {canManage && active ? (
           <div className="grid gap-2 pt-2 sm:grid-cols-3">
             <button className={secondaryButton} onClick={onEdit} type="button">
               Editar

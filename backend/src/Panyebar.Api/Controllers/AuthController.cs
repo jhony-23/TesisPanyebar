@@ -11,13 +11,16 @@ public sealed class AuthController : ControllerBase
 {
     private readonly IUsuarioAdministrativoAuthenticationService _authenticationService;
     private readonly IAccessTokenService _accessTokenService;
+    private readonly IUsuarioPermissionRepository _permissionRepository;
 
     public AuthController(
         IUsuarioAdministrativoAuthenticationService authenticationService,
-        IAccessTokenService accessTokenService)
+        IAccessTokenService accessTokenService,
+        IUsuarioPermissionRepository permissionRepository)
     {
         _authenticationService = authenticationService;
         _accessTokenService = accessTokenService;
+        _permissionRepository = permissionRepository;
     }
 
     [HttpPost("login")]
@@ -37,6 +40,7 @@ public sealed class AuthController : ControllerBase
         }
 
         var accessToken = _accessTokenService.Generate(result);
+        var permissions = await _permissionRepository.GetPermissionsAsync(result.Id.Value, cancellationToken);
 
         return Ok(new
         {
@@ -45,29 +49,33 @@ public sealed class AuthController : ControllerBase
             usuario = new
             {
                 id = result.Id.Value,
-                nombreUsuario = result.NombreUsuario
+                nombreUsuario = result.NombreUsuario,
+                permisos = permissions
             }
         });
     }
 
     [HttpGet("me")]
     [Authorize]
-    public IActionResult Me()
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
     {
         var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub");
         var nameClaim = User.FindFirstValue(ClaimTypes.Name)
             ?? User.FindFirstValue("unique_name");
 
-        if (string.IsNullOrWhiteSpace(idClaim) || string.IsNullOrWhiteSpace(nameClaim))
+        if (string.IsNullOrWhiteSpace(idClaim) || string.IsNullOrWhiteSpace(nameClaim) || !int.TryParse(idClaim, out var userId))
         {
             return Unauthorized();
         }
 
+        var permissions = await _permissionRepository.GetPermissionsAsync(userId, cancellationToken);
+
         return Ok(new
         {
-            id = int.Parse(idClaim),
-            nombreUsuario = nameClaim
+            id = userId,
+            nombreUsuario = nameClaim,
+            permisos = permissions
         });
     }
 }

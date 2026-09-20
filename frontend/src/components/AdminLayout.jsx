@@ -1,29 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../app/useAuth.js'
-
-const navigation = [
-  { label: 'Inicio', path: '/admin', available: true, icon: 'home' },
-  { label: 'Personas', path: '/admin/personas', available: true, icon: 'users' },
-  { label: 'Sectores', path: '/admin/sectores', available: true, icon: 'map' },
-  { label: 'Suministros', path: '/admin/suministros', available: true, icon: 'drop' },
-  { label: 'Solicitudes', path: '/admin/solicitudes', available: true, icon: 'inbox' },
-  { label: 'Cuotas', path: '/admin/cuotas', available: true, icon: 'coins' },
-  { label: 'Obligaciones', path: '/admin/obligaciones', available: true, icon: 'document' },
-  { label: 'Jornadas', path: '/admin/jornadas', available: true, icon: 'calendar' },
-  { label: 'Pagos', path: '/admin/pagos', available: true, icon: 'card' },
-  { label: 'Finanzas', path: '/admin/finanzas', available: true, icon: 'chart' },
-  { label: 'Dashboard', path: '/admin/dashboard', available: true, icon: 'chart' },
-  { label: 'Reportes', path: '/admin/reportes', available: true, icon: 'report' },
-  { label: 'Abastecimiento', path: '/admin/abastecimiento', available: true, icon: 'water' },
-  { label: 'Administración', path: '/admin/administracion', available: true, icon: 'settings' },
-]
+import { NAVIGATION_ITEMS } from '../app/permissions.js'
 
 function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const { logout, user } = useAuth()
+  const { hasAnyPermission, logout, user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+
+  const navigation = useMemo(() => {
+    return NAVIGATION_ITEMS.filter((item) => hasAnyPermission(item.permissions))
+  }, [hasAnyPermission])
 
   function handleLogout() {
     logout()

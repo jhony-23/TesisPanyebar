@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -22,7 +23,8 @@ const initialForm = {
 }
 
 function SolicitudesNuevoServicioPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.SUMINISTROS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [solicitudes, setSolicitudes] = useState([])
   const [personas, setPersonas] = useState([])
@@ -137,7 +139,7 @@ function SolicitudesNuevoServicioPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        action={<button className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2" onClick={() => { setIsCreateOpen(true); setFormError(null) }} type="button">Nueva solicitud</button>}
+        action={canManage ? <button className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2" onClick={() => { setIsCreateOpen(true); setFormError(null) }} type="button">Nueva solicitud</button> : null}
         description="Administra las solicitudes para registrar nuevos suministros de agua."
         eyebrow="Gestión comunitaria"
         title="Solicitudes de nuevo servicio"
@@ -146,7 +148,7 @@ function SolicitudesNuevoServicioPage() {
       {error && <Alert message={error} onDismiss={() => setError(null)} />}
       {feedback && <div aria-live="polite" className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{feedback}</div>}
 
-      {isCreateOpen && <Panel>
+      {canManage && isCreateOpen && <Panel>
         <div className="flex items-start justify-between gap-4">
           <div><h2 className="text-base font-semibold text-slate-900">Nueva solicitud</h2><p className="mt-1 text-sm text-slate-500">La solicitud comenzará en estado Pendiente.</p></div>
           <button aria-label="Cerrar formulario de solicitud" className="rounded-md px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100" onClick={resetForm} type="button">Cerrar</button>
@@ -163,28 +165,29 @@ function SolicitudesNuevoServicioPage() {
 
       <Panel>
         <div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold text-slate-900">Solicitudes registradas</h2><p className="mt-1 text-sm text-slate-500">{solicitudes.length} {solicitudes.length === 1 ? 'solicitud' : 'solicitudes'}</p></div></div>
-        <div className="mt-5">{isLoading ? <LoadingState message="Cargando solicitudes..." /> : solicitudes.length === 0 ? <EmptyState description="Las solicitudes de nuevo servicio aparecerán aquí." title="No hay solicitudes registradas" /> : <RequestList isSaving={isSaving} onResolve={setPendingResolution} solicitudes={solicitudes} />}</div>
+        <div className="mt-5">{isLoading ? <LoadingState message="Cargando solicitudes..." /> : solicitudes.length === 0 ? <EmptyState description="Las solicitudes de nuevo servicio aparecerán aquí." title="No hay solicitudes registradas" /> : <RequestList canManage={canManage} isSaving={isSaving} onResolve={setPendingResolution} solicitudes={solicitudes} />}</div>
       </Panel>
 
-      {pendingResolution && <ResolutionDialog isSaving={isSaving} onCancel={() => setPendingResolution(null)} onConfirm={resolveRequest} request={pendingResolution.request} action={pendingResolution.action} />}
+      {canManage && pendingResolution && <ResolutionDialog isSaving={isSaving} onCancel={() => setPendingResolution(null)} onConfirm={resolveRequest} request={pendingResolution.request} action={pendingResolution.action} />}
     </div>
   )
 }
 
-function RequestList({ isSaving, onResolve, solicitudes }) {
-  return <><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[900px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-3 pr-4 font-semibold">Solicitante</th><th className="pb-3 pr-4 font-semibold">Sector</th><th className="pb-3 pr-4 font-semibold">Dirección</th><th className="pb-3 pr-4 font-semibold">Fecha</th><th className="pb-3 pr-4 font-semibold">Estado</th><th className="pb-3 pr-4 font-semibold">Suministro</th><th className="pb-3 text-right font-semibold">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{solicitudes.map((request) => <RequestRow isSaving={isSaving} key={request.solicitudNuevoServicioId} onResolve={onResolve} request={request} />)}</tbody></table></div><div className="space-y-3 md:hidden">{solicitudes.map((request) => <RequestCard isSaving={isSaving} key={request.solicitudNuevoServicioId} onResolve={onResolve} request={request} />)}</div></>
+function RequestList({ canManage, isSaving, onResolve, solicitudes }) {
+  return <><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[900px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-3 pr-4 font-semibold">Solicitante</th><th className="pb-3 pr-4 font-semibold">Sector</th><th className="pb-3 pr-4 font-semibold">Dirección</th><th className="pb-3 pr-4 font-semibold">Fecha</th><th className="pb-3 pr-4 font-semibold">Estado</th><th className="pb-3 pr-4 font-semibold">Suministro</th><th className="pb-3 text-right font-semibold">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{solicitudes.map((request) => <RequestRow canManage={canManage} isSaving={isSaving} key={request.solicitudNuevoServicioId} onResolve={onResolve} request={request} />)}</tbody></table></div><div className="space-y-3 md:hidden">{solicitudes.map((request) => <RequestCard canManage={canManage} isSaving={isSaving} key={request.solicitudNuevoServicioId} onResolve={onResolve} request={request} />)}</div></>
 }
 
-function RequestRow({ isSaving, onResolve, request }) {
-  return <tr><td className="py-4 pr-4 font-semibold text-slate-900">{request.personaSolicitante}</td><td className="py-4 pr-4 text-slate-600">{request.sectorNombre}</td><td className="max-w-48 py-4 pr-4 text-slate-600">{request.direccionReferencia}</td><td className="py-4 pr-4 text-slate-600">{formatGuatemalaDateTime(request.fechaSolicitud)}</td><td className="py-4 pr-4"><RequestStatusBadge estado={request.estado} /></td><td className="py-4 pr-4 text-slate-600">{request.nis || '—'}</td><td className="py-4 text-right"><RequestActions isSaving={isSaving} onResolve={onResolve} request={request} /></td></tr>
+function RequestRow({ canManage, isSaving, onResolve, request }) {
+  return <tr><td className="py-4 pr-4 font-semibold text-slate-900">{request.personaSolicitante}</td><td className="py-4 pr-4 text-slate-600">{request.sectorNombre}</td><td className="max-w-48 py-4 pr-4 text-slate-600">{request.direccionReferencia}</td><td className="py-4 pr-4 text-slate-600">{formatGuatemalaDateTime(request.fechaSolicitud)}</td><td className="py-4 pr-4"><RequestStatusBadge estado={request.estado} /></td><td className="py-4 pr-4 text-slate-600">{request.nis || '—'}</td><td className="py-4 text-right"><RequestActions canManage={canManage} isSaving={isSaving} onResolve={onResolve} request={request} /></td></tr>
 }
 
-function RequestCard({ isSaving, onResolve, request }) {
-  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{request.personaSolicitante}</h3><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Sector: </dt><dd className="inline">{request.sectorNombre}</dd></div><div><dt className="inline font-medium text-slate-500">Dirección: </dt><dd className="inline">{request.direccionReferencia}</dd></div><div><dt className="inline font-medium text-slate-500">Fecha: </dt><dd className="inline">{formatGuatemalaDateTime(request.fechaSolicitud)}</dd></div><div><dt className="inline font-medium text-slate-500">Suministro: </dt><dd className="inline">{request.nis || '—'}</dd></div></dl></div><RequestStatusBadge estado={request.estado} /></div><div className="mt-4 border-t border-slate-100 pt-3"><RequestActions isSaving={isSaving} onResolve={onResolve} request={request} /></div></article>
+function RequestCard({ canManage, isSaving, onResolve, request }) {
+  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{request.personaSolicitante}</h3><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Sector: </dt><dd className="inline">{request.sectorNombre}</dd></div><div><dt className="inline font-medium text-slate-500">Dirección: </dt><dd className="inline">{request.direccionReferencia}</dd></div><div><dt className="inline font-medium text-slate-500">Fecha: </dt><dd className="inline">{formatGuatemalaDateTime(request.fechaSolicitud)}</dd></div><div><dt className="inline font-medium text-slate-500">Suministro: </dt><dd className="inline">{request.nis || '—'}</dd></div></dl></div><RequestStatusBadge estado={request.estado} /></div><div className="mt-4 border-t border-slate-100 pt-3"><RequestActions canManage={canManage} isSaving={isSaving} onResolve={onResolve} request={request} /></div></article>
 }
 
-function RequestActions({ isSaving, onResolve, request }) {
+function RequestActions({ canManage, isSaving, onResolve, request }) {
   if (request.estado !== 1) return <p className="text-right text-xs text-slate-500">Resuelta el {formatGuatemalaDateTime(request.fechaResolucion)} por {request.usuarioResolucion || 'usuario administrativo'}</p>
+  if (!canManage) return null
   return <div className="flex flex-wrap justify-end gap-2"><button className="rounded-md border border-[#28727a]/40 px-3 py-1.5 text-xs font-semibold text-[#1c5961] hover:bg-[#eef6f5] disabled:opacity-60" disabled={isSaving} onClick={() => onResolve({ action: 'approve', request })} type="button">Aprobar</button><button className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60" disabled={isSaving} onClick={() => onResolve({ action: 'reject', request })} type="button">Rechazar</button></div>
 }
 

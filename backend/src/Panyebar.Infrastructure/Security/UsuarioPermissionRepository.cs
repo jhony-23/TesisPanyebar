@@ -24,6 +24,15 @@ public sealed class UsuarioPermissionRepository : IUsuarioPermissionRepository
             return false;
         }
 
+        var isUserActive = await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == usuarioAdministrativoId && u.Estado == EstadoRegistro.Activo, cancellationToken);
+
+        if (!isUserActive)
+        {
+            return false;
+        }
+
         return await _dbContext.UsuarioRoles
             .AsNoTracking()
             .Where(ur => ur.UsuarioAdministrativoId == usuarioAdministrativoId)
@@ -44,5 +53,48 @@ public sealed class UsuarioPermissionRepository : IUsuarioPermissionRepository
                 p => p.Id,
                 (rp, p) => p)
             .AnyAsync(p => p.Codigo == permisoCodigo && p.Estado == EstadoRegistro.Activo, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<string>> GetPermissionsAsync(
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default)
+    {
+        if (usuarioAdministrativoId <= 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var isUserActive = await _dbContext.UsuariosAdministrativos
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == usuarioAdministrativoId && u.Estado == EstadoRegistro.Activo, cancellationToken);
+
+        if (!isUserActive)
+        {
+            return Array.Empty<string>();
+        }
+
+        return await _dbContext.UsuarioRoles
+            .AsNoTracking()
+            .Where(ur => ur.UsuarioAdministrativoId == usuarioAdministrativoId)
+            .Join(
+                _dbContext.Roles.AsNoTracking(),
+                ur => ur.RolId,
+                r => r.Id,
+                (ur, r) => r)
+            .Where(r => r.Estado == EstadoRegistro.Activo)
+            .Join(
+                _dbContext.RolPermisos.AsNoTracking(),
+                r => r.Id,
+                rp => rp.RolId,
+                (r, rp) => rp)
+            .Join(
+                _dbContext.Permisos.AsNoTracking(),
+                rp => rp.PermisoId,
+                p => p.Id,
+                (rp, p) => p)
+            .Where(p => p.Estado == EstadoRegistro.Activo && !string.IsNullOrWhiteSpace(p.Codigo))
+            .Select(p => p.Codigo)
+            .Distinct()
+            .ToListAsync(cancellationToken);
     }
 }

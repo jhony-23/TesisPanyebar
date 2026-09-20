@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -18,7 +19,8 @@ const initialForm = {
 }
 
 function CuotasPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.CUOTAS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [cuotas, setCuotas] = useState([])
   const [form, setForm] = useState(initialForm)
@@ -143,7 +145,7 @@ function CuotasPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        action={<button className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2" onClick={resetForm} type="button">Nueva cuota</button>}
+        action={canManage ? <button className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2" onClick={resetForm} type="button">Nueva cuota</button> : null}
         description="Configura los cobros administrativos que podrán generar obligaciones para los suministros."
         eyebrow="Gestión financiera"
         title="Cuotas"
@@ -165,6 +167,7 @@ function CuotasPage() {
           </div>
         </Panel>
 
+        {canManage && (
         <Panel className="h-fit xl:sticky xl:top-28">
           <h2 className="text-base font-semibold text-slate-900">{editingId === null ? 'Crear cuota' : 'Editar cuota'}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">El monto se copiará y conservará en cada obligación cuando sea generada.</p>
@@ -201,9 +204,10 @@ function CuotasPage() {
             </div>
           </form>
         </Panel>
+        )}
       </div>
 
-      {pendingStatus && <StatusDialog isSaving={isSaving} onCancel={() => setPendingStatus(null)} onConfirm={changeStatus} pendingStatus={pendingStatus} />}
+      {canManage && pendingStatus && <StatusDialog isSaving={isSaving} onCancel={() => setPendingStatus(null)} onConfirm={changeStatus} pendingStatus={pendingStatus} />}
     </div>
   )
 }
@@ -239,6 +243,8 @@ function CuotaCard({ cuota, isSaving, onEdit, onStatus }) {
 }
 
 function CuotaActions({ cuota, isSaving, onEdit, onStatus }) {
+  const { hasPermission } = useAuth()
+  if (!hasPermission(PERMISOS.CUOTAS_GESTIONAR)) return null
   const targetEstado = cuota.estado === 1 ? 2 : 1
   return <div className="flex flex-wrap justify-end gap-2"><button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onEdit(cuota)} type="button">Editar</button>{(cuota.estado === 1 || cuota.estado === 2) && <button className="rounded-md border border-[#28727a]/40 px-3 py-1.5 text-xs font-semibold text-[#1c5961] hover:bg-[#eef6f5] disabled:opacity-60" disabled={isSaving} onClick={() => onStatus({ cuota, estado: targetEstado })} type="button">{cuota.estado === 1 ? 'Inactivar' : 'Activar'}</button>}</div>
 }

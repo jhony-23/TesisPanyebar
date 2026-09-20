@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -27,7 +28,8 @@ const initialForm = {
 }
 
 function FinanzasPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.FINANZAS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
 
   const [filters, setFilters] = useState(initialFilters)
@@ -263,7 +265,7 @@ function FinanzasPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        action={(
+        action={canManage ? (
           <button
             className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSaving}
@@ -272,7 +274,7 @@ function FinanzasPage() {
           >
             Nuevo egreso
           </button>
-        )}
+        ) : null}
         description="Consulta ingresos, egresos y balance administrativo del Comité de Agua Potable."
         eyebrow="Gestión financiera"
         title="Finanzas"
@@ -281,7 +283,7 @@ function FinanzasPage() {
       {error && <Alert message={error} onDismiss={() => setError(null)} />}
       {feedback && <SuccessAlert message={feedback} />}
 
-      {isFormOpen && (
+      {canManage && isFormOpen && (
         <Panel>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -494,7 +496,7 @@ function FinanzasPage() {
         </div>
       </Panel>
 
-      {pendingAnnulment && (
+      {canManage && pendingAnnulment && (
         <AnnulmentDialog
           expense={pendingAnnulment}
           isSaving={isSaving}
@@ -719,9 +721,12 @@ function ExpenseStatusBadge({ status }) {
 }
 
 function ExpenseActions({ expense, isSaving, onAnnul, onEdit }) {
+  const { hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.FINANZAS_GESTIONAR)
   if (expense.estado !== 1) {
     return <span className="text-xs text-slate-400">Sin acciones disponibles</span>
   }
+  if (!canManage) return null
 
   return (
     <div className="flex flex-wrap justify-end gap-2">

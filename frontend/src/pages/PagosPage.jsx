@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../app/useAuth.js'
+import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -24,7 +25,8 @@ const initialForm = {
 }
 
 function PagosPage() {
-  const { authenticatedRequest } = useAuth()
+  const { authenticatedRequest, hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.PAGOS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
 
   const [pagos, setPagos] = useState([])
@@ -474,7 +476,7 @@ function PagosPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
-        action={(
+        action={canManage ? (
           <button
             className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={registerUnavailable}
@@ -483,7 +485,7 @@ function PagosPage() {
           >
             Registrar pago
           </button>
-        )}
+        ) : null}
         description="Consulta pagos registrados y cancela una o varias obligaciones completas del mismo titular."
         eyebrow="Gestión financiera"
         title="Pagos"
@@ -510,7 +512,7 @@ function PagosPage() {
           <InfoAlert message="No existen obligaciones pendientes disponibles para registrar un pago." />
         )}
 
-      {isRegisterOpen && (
+      {canManage && isRegisterOpen && (
         <div id="registro-pago">
           <PaymentForm
             form={form}
@@ -580,7 +582,7 @@ function PagosPage() {
         />
       )}
 
-      {pendingAnnulment && (
+      {canManage && pendingAnnulment && (
         <PaymentAnnulmentDialog
           isSaving={isSaving}
           onCancel={() => setPendingAnnulment(null)}
@@ -588,7 +590,7 @@ function PagosPage() {
           payment={pendingAnnulment}
         />
       )}
-      {pendingConfirmation && selectedHolder && (
+      {canManage && pendingConfirmation && selectedHolder && (
         <ConfirmationDialog
           holder={selectedHolder}
           isSaving={isSaving}
@@ -911,6 +913,8 @@ function ConfirmationDialog({
 }
 
 function PaymentList({ isSaving, onAnnul, onOpen, pagos }) {
+  const { hasPermission } = useAuth()
+  const canManage = hasPermission(PERMISOS.PAGOS_GESTIONAR)
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
@@ -961,7 +965,7 @@ function PaymentList({ isSaving, onAnnul, onOpen, pagos }) {
                       Ver detalle
                     </button>
 
-                    {isRegisteredPayment(payment.estado) && (
+                    {canManage && isRegisteredPayment(payment.estado) && (
                       <button
                         className={dangerButton}
                         disabled={isSaving}
@@ -1023,7 +1027,7 @@ function PaymentList({ isSaving, onAnnul, onOpen, pagos }) {
                 Ver detalle
               </button>
 
-              {isRegisteredPayment(payment.estado) && (
+              {canManage && isRegisteredPayment(payment.estado) && (
                 <button
                   className={dangerButton}
                   disabled={isSaving}
