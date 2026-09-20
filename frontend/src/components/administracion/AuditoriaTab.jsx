@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   getAuditoriaAdministrativa,
+  getCargosAdministracion,
+  getPermisosAdministrativos,
+  getRolesAdministrativos,
   getUsuariosAdministrativos,
 } from '../../services/administracionService'
+import { getCuotas } from '../../services/cuotaService.js'
+import { getJornadas } from '../../services/jornadaService.js'
+import { getObligaciones } from '../../services/obligacionService.js'
+import { getPersonas } from '../../services/personaService.js'
+import { getSectores } from '../../services/sectorService.js'
+import { getSuministros } from '../../services/suministroService.js'
 
 const initialFilters = {
   fechaDesde: '',
@@ -16,6 +25,7 @@ const initialFilters = {
 function AuditoriaTab({ authenticatedRequest }) {
   const [rows, setRows] = useState([])
   const [usuarios, setUsuarios] = useState([])
+  const [auditCatalogs, setAuditCatalogs] = useState(emptyAuditCatalogs)
   const [filters, setFilters] = useState(initialFilters)
   const [appliedFilters, setAppliedFilters] = useState(initialFilters)
   const [isLoading, setIsLoading] = useState(true)
@@ -27,7 +37,19 @@ function AuditoriaTab({ authenticatedRequest }) {
 
     async function loadInitialData() {
       try {
-        const [auditData, userData] = await Promise.all([
+        const [
+          auditData,
+          userData,
+          personasData,
+          cargosData,
+          rolesData,
+          permisosData,
+          sectoresData,
+          suministrosData,
+          cuotasData,
+          jornadasData,
+          obligacionesData,
+        ] = await Promise.all([
           getAuditoriaAdministrativa(
             authenticatedRequest,
             initialFilters,
@@ -35,6 +57,15 @@ function AuditoriaTab({ authenticatedRequest }) {
           getUsuariosAdministrativos(
             authenticatedRequest,
           ),
+          getPersonas(authenticatedRequest),
+          getCargosAdministracion(authenticatedRequest),
+          getRolesAdministrativos(authenticatedRequest),
+          getPermisosAdministrativos(authenticatedRequest),
+          getSectores(authenticatedRequest),
+          getSuministros(authenticatedRequest),
+          getCuotas(authenticatedRequest),
+          getJornadas(authenticatedRequest),
+          getObligaciones(authenticatedRequest),
         ])
 
         if (cancelled) return
@@ -46,6 +77,18 @@ function AuditoriaTab({ authenticatedRequest }) {
         setUsuarios(
           Array.isArray(userData) ? userData : [],
         )
+
+        setAuditCatalogs({
+          personas: toMap(personasData),
+          cargos: toMap(cargosData),
+          roles: toMap(rolesData),
+          permisos: toMap(permisosData),
+          sectores: toMap(sectoresData),
+          suministros: toMap(suministrosData),
+          cuotas: toMap(cuotasData),
+          jornadas: toMap(jornadasData),
+          obligaciones: toMap(obligacionesData),
+        })
       } catch (requestError) {
         if (cancelled) return
 
@@ -358,6 +401,7 @@ function AuditoriaTab({ authenticatedRequest }) {
 
       {detail && (
         <AuditDetailDialog
+          catalogs={auditCatalogs}
           onClose={() => setDetail(null)}
           row={detail}
         />
@@ -478,7 +522,7 @@ function AuditCard({ onOpen, row }) {
   )
 }
 
-function AuditDetailDialog({ onClose, row }) {
+function AuditDetailDialog({ catalogs, onClose, row }) {
   const date = formatDateTime(row.fecha)
 
   return (
@@ -511,11 +555,13 @@ function AuditDetailDialog({ onClose, row }) {
       <div className="mt-5 space-y-4">
         <AuditValue
           label="Valor anterior"
+          catalogs={catalogs}
           value={row.valorAnterior}
         />
 
         <AuditValue
           label="Valor nuevo"
+          catalogs={catalogs}
           value={row.valorNuevo}
         />
       </div>
@@ -542,8 +588,8 @@ function AuditDetailDialog({ onClose, row }) {
   )
 }
 
-function AuditValue({ label, value }) {
-  const formatted = formatAuditValue(value)
+function AuditValue({ catalogs, label, value }) {
+  const items = formatAuditValue(value, catalogs)
 
   return (
     <div>
@@ -551,10 +597,24 @@ function AuditValue({ label, value }) {
         {label}
       </p>
 
-      {formatted ? (
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-950 p-3 text-xs leading-5 text-slate-100">
-          {formatted}
-        </pre>
+      {items ? (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          {items.map((item, index) => (
+            <div
+              className={`px-3 py-2.5 ${
+                index > 0 ? 'border-t border-slate-100' : ''
+              }`}
+              key={`${item.label}-${index}`}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                {item.label}
+              </p>
+              <p className="mt-1 break-words text-sm font-medium text-slate-800">
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-400">
           Sin información registrada
@@ -769,20 +829,335 @@ function formatDateTime(value) {
   }
 }
 
-function formatAuditValue(value) {
+function formatAuditValue(value, catalogs) {
   if (!value) return null
 
   try {
-    return JSON.stringify(
-      JSON.parse(value),
-      null,
-      2,
-    )
+    const parsed = JSON.parse(value)
+
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed)
+    ) {
+      return Object.entries(parsed).map(([key, item]) => ({
+        label: friendlyAuditField(key),
+        value: friendlyAuditValue(key, item, catalogs),
+      }))
+    }
+
+    return [
+      {
+        label: 'Valor',
+        value: friendlyAuditValue('', parsed, catalogs),
+      },
+    ]
   } catch {
-    return value
+    return parseAuditText(value, catalogs)
   }
 }
 
+function parseAuditText(value, catalogs) {
+  const parts = String(value)
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  if (
+    parts.length > 0 &&
+    parts.every((part) => part.includes(':'))
+  ) {
+    return parts.map((part) => {
+      const separator = part.indexOf(':')
+      const key = part.slice(0, separator).trim()
+      const item = part.slice(separator + 1).trim()
+
+      return {
+        label: friendlyAuditField(key),
+        value: friendlyAuditValue(key, item, catalogs),
+      }
+    })
+  }
+
+  return [
+    {
+      label: 'Detalle',
+      value: String(value),
+    },
+  ]
+}
+
+function friendlyAuditField(key) {
+  const labels = {
+    AdministracionComiteId: 'Administración del comité',
+    Asignaciones: 'Integrantes asignados',
+    CargoId: 'Cargo',
+    Estado: 'Estado',
+    FechaFin: 'Fecha de finalización',
+    FechaInicio: 'Fecha de inicio',
+    Monto: 'Monto',
+    MontoIncumplimiento: 'Monto por ausencia',
+    Nombre: 'Nombre',
+    Concepto: 'Concepto',
+    Resultado: 'Resultado',
+    Observacion: 'Observación',
+    Periodo: 'Período',
+    Periodicidad: 'Periodicidad',
+    Ubicacion: 'Ubicación',
+    Horario: 'Horario',
+    ObligacionIds: 'Obligaciones relacionadas',
+    PersonaId: 'Persona',
+    PersonaIds: 'Personas',
+    RolIds: 'Roles asignados',
+    PermisoIds: 'Permisos asignados',
+    CuotaId: 'Cuota',
+    JornadaId: 'Jornada',
+    SectorId: 'Sector',
+    SuministroId: 'Suministro',
+  }
+
+  if (labels[key]) return labels[key]
+
+  return String(key)
+    .replace(/Id$/u, '')
+    .replace(/([a-záéíóúñ])([A-Z])/gu, '$1 $2')
+    .replace(/^./u, (letter) =>
+      letter.toLocaleUpperCase('es'),
+    )
+}
+
+function friendlyAuditValue(key, value, catalogs) {
+  if (Array.isArray(value) && value.length === 0) {
+    if (key === 'RolIds') {
+      return 'Sin roles asignados'
+    }
+
+    if (key === 'PermisoIds') {
+      return 'Sin permisos asignados'
+    }
+
+    if (key === 'PersonaIds') {
+      return 'Sin personas registradas'
+    }
+
+    if (key === 'ObligacionIds') {
+      return 'Sin obligaciones relacionadas'
+    }
+
+    if (key === 'Asignaciones') {
+      return 'No había integrantes asignados'
+    }
+
+    return 'Sin información registrada'
+  }
+
+  const resolved = resolveAuditReference(key, value, catalogs)
+
+  if (resolved !== null) {
+    return resolved
+  }
+
+  if (Array.isArray(value)) {
+
+    return value
+      .map((item) => {
+        if (
+          item &&
+          typeof item === 'object' &&
+          !Array.isArray(item)
+        ) {
+          return Object.entries(item)
+            .filter(([nestedKey]) => nestedKey !== 'Id')
+            .map(
+              ([nestedKey, nestedValue]) =>
+                `${friendlyAuditField(nestedKey)}: ${friendlyAuditValue(
+                  nestedKey,
+                  nestedValue,
+                  catalogs,
+                )}`,
+            )
+            .join(' · ')
+        }
+
+        return (
+          resolveAuditReference(
+            key,
+            item,
+            catalogs,
+            true,
+          ) ||
+          String(item)
+        )
+      })
+      .join(' | ')
+  }
+
+  if (value === null || value === undefined || value === '') {
+    return 'Sin información'
+  }
+
+  if (key === 'Monto' || key === 'MontoIncumplimiento') {
+    const amount = Number(value)
+
+    if (Number.isFinite(amount)) {
+      return new Intl.NumberFormat(
+        'es-GT',
+        {
+          style: 'currency',
+          currency: 'GTQ',
+        },
+      ).format(amount)
+    }
+  }
+
+  if (
+    key.endsWith('Id') &&
+    !key.endsWith('Ids')
+  ) {
+    return 'Registro relacionado no disponible'
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'Sí' : 'No'
+  }
+
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .map(
+        ([nestedKey, nestedValue]) =>
+          `${friendlyAuditField(nestedKey)}: ${friendlyAuditValue(
+            nestedKey,
+            nestedValue,
+            catalogs,
+          )}`,
+      )
+      .join(' · ')
+  }
+
+  return String(value)
+}
+
+const emptyAuditCatalogs = {
+  personas: new Map(),
+  cargos: new Map(),
+  roles: new Map(),
+  permisos: new Map(),
+  sectores: new Map(),
+  suministros: new Map(),
+  cuotas: new Map(),
+  jornadas: new Map(),
+  obligaciones: new Map(),
+}
+
+function toMap(items) {
+  return new Map(
+    (Array.isArray(items) ? items : []).map((item) => [
+      Number(item.id),
+      item,
+    ]),
+  )
+}
+
+function resolveAuditReference(
+  key,
+  value,
+  catalogs,
+  arrayItem = false,
+) {
+  if (!catalogs) return null
+
+  const numericValue = Number(value)
+
+  if (!Number.isInteger(numericValue)) {
+    return null
+  }
+
+  if (key === 'PersonaId' || key === 'PersonaIds') {
+    const persona = catalogs.personas.get(numericValue)
+
+    return persona
+      ? `${persona.nombres} ${persona.apellidos}`.trim()
+      : 'Persona que ya no se encuentra disponible'
+  }
+
+  if (key === 'CargoId') {
+    const cargo = catalogs.cargos.get(numericValue)
+
+    return cargo?.nombre ||
+      'Cargo que ya no se encuentra disponible'
+  }
+
+  if (key === 'RolIds') {
+    const rol = catalogs.roles.get(numericValue)
+
+    return rol?.nombre ||
+      'Rol que ya no se encuentra disponible'
+  }
+
+  if (key === 'PermisoIds') {
+    const permiso = catalogs.permisos.get(numericValue)
+
+    if (!permiso) {
+      return 'Permiso que ya no se encuentra disponible'
+    }
+
+    return permiso.nombre
+      ? `${permiso.nombre} (${permiso.codigo})`
+      : permiso.codigo
+  }
+
+  if (key === 'SectorId') {
+    const sector = catalogs.sectores.get(numericValue)
+
+    return sector?.nombre ||
+      'Sector que ya no se encuentra disponible'
+  }
+
+  if (key === 'SuministroId') {
+    const suministro =
+      catalogs.suministros.get(numericValue)
+
+    return suministro?.nis
+      ? `${suministro.nis} · ${suministro.sectorNombre || 'Suministro'}`
+      : 'Suministro que ya no se encuentra disponible'
+  }
+
+  if (key === 'CuotaId') {
+    const cuota = catalogs.cuotas.get(numericValue)
+
+    return cuota?.nombre ||
+      'Cuota que ya no se encuentra disponible'
+  }
+
+  if (key === 'JornadaId') {
+    const jornada = catalogs.jornadas.get(numericValue)
+
+    return jornada?.nombre ||
+      'Jornada que ya no se encuentra disponible'
+  }
+
+  if (key === 'ObligacionIds') {
+    const obligacion =
+      catalogs.obligaciones.get(numericValue)
+
+    if (obligacion) {
+      const concepto =
+        obligacion.concepto ||
+        obligacion.descripcion ||
+        `Obligación #${numericValue}`
+
+      return concepto
+    }
+
+    return 'Obligación que ya no se encuentra disponible'
+  }
+
+  if (arrayItem) {
+    return null
+  }
+
+  return null
+}
 function friendlyAction(action) {
   if (!action) return 'Operación'
 
