@@ -744,7 +744,7 @@ function ParticipantCard({ canManage, isSaving, onChange, onRemove, participant,
               <option value="0">Pendiente</option>
               <option value="1">Participó</option>
               <option value="2">Ausencia</option>
-              <option value="3">Ausencia justificada</option>
+              {/* <option value="3">Ausencia justificada</option> */}
             </select>
 
             <input
