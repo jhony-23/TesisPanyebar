@@ -6,6 +6,7 @@ import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Panel from '../components/ui/Panel.jsx'
+import ReasonField from '../components/ui/ReasonField.jsx'
 import { getObligaciones } from '../services/obligacionService.js'
 import {
   annulPayment,
@@ -233,10 +234,10 @@ function PagosPage() {
     setFormError(null)
   }
 
-  function changeConcept(event) {
+  function changeConcept(value) {
     setForm((current) => ({
       ...current,
-      concepto: event.target.value,
+      concepto: value,
     }))
 
     setFormError(null)
@@ -522,7 +523,7 @@ function PagosPage() {
             isSaving={isSaving}
             onCancel={closeRegister}
             onConceptChange={changeConcept}
-            onHolderChange={selectHolder}
+              onHolderChange={selectHolder}
             onSelectAll={selectAllHolderObligations}
             onSubmit={requestConfirmation}
             onToggleObligation={toggleObligation}
@@ -774,21 +775,24 @@ function PaymentForm({
           </div>
         )}
 
-        <Field
-          inputId="pago-concepto"
+        <ReasonField
+          disabled={isSaving}
           label="Concepto"
-        >
-          <input
-            className={inputClass}
-            disabled={isSaving}
-            id="pago-concepto"
-            maxLength="200"
-            onChange={onConceptChange}
-            placeholder="Ej. Pago de cuotas pendientes"
-            required
-            value={form.concepto}
-          />
-        </Field>
+          maxLength={200}
+          onChange={onConceptChange}
+
+          options={[
+            'Pago de cuota ordinaria',
+            'Pago de cuota extraordinaria',
+            'Pago de obligaciones pendientes',
+            'Pago de jornada comunitaria',
+            'Pago de varias obligaciones',
+          ]}
+          otherLabel="Especifique el concepto"
+          placeholder="Seleccione un concepto"
+          required
+          value={form.concepto}
+        />
 
         <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

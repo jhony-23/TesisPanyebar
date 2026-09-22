@@ -5,6 +5,7 @@ import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Panel from '../components/ui/Panel.jsx'
+import ReasonField from '../components/ui/ReasonField.jsx'
 import {
   annulEgreso,
   createEgreso,
@@ -308,21 +309,29 @@ function FinanzasPage() {
           </div>
 
           <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={saveExpense}>
-            <label className="text-sm font-medium text-slate-700 md:col-span-2" htmlFor="egreso-concepto">
-              Concepto *
-              <input
-                className={inputClass}
-                id="egreso-concepto"
-                maxLength="200"
-                name="concepto"
-                onChange={changeField}
+            <div className="md:col-span-2">
+              <ReasonField
+                disabled={isSaving}
+                label="Concepto"
+                maxLength={200}
+                onChange={(value) => {
+                  setForm((current) => ({ ...current, concepto: value }))
+                  setFormError(null)
+                }}
+                options={[
+                  'Compra de materiales',
+                  'Reparación y mantenimiento',
+                  'Compra de herramientas o equipo',
+                  'Transporte',
+                  'Servicios administrativos',
+                  'Mantenimiento de infraestructura',
+                ]}
+                otherLabel="Especifique el concepto"
+                placeholder="Seleccione un concepto"
                 required
                 value={form.concepto}
               />
-              <span className="mt-1 block text-right text-xs font-normal text-slate-400">
-                {form.concepto.length}/200
-              </span>
-            </label>
+            </div>
 
             <label className="text-sm font-medium text-slate-700" htmlFor="egreso-monto">
               Monto (Q) *

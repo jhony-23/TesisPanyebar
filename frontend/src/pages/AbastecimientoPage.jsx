@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReasonField from '../components/ui/ReasonField.jsx'
 import { useAuth } from '../app/useAuth.js'
 import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
@@ -873,7 +874,10 @@ function StateDialog({ confirmation, isSaving, onChange, onClose, onConfirm }) {
       onClose={onClose}
       title={cancelling ? 'Cancelar programación' : 'Marcar como completada'}
     >
-      <div className="space-y-5">
+      <form className="space-y-5" onSubmit={(event) => {
+        event.preventDefault()
+        if (!isSaving) onConfirm()
+      }}>
         <div className="rounded-lg bg-slate-50 p-4">
           <p className="font-semibold text-slate-900">
             {confirmation.row.sectorNombre}
@@ -886,15 +890,21 @@ function StateDialog({ confirmation, isSaving, onChange, onClose, onConfirm }) {
         </div>
 
         {cancelling && (
-          <Field label="Observación de cancelación">
-            <textarea
-              className={`${inputClass} min-h-24 resize-y`}
-              maxLength="1000"
-              onChange={(event) => onChange(event.target.value)}
-              placeholder="Opcional"
-              value={confirmation.observacion || ''}
-            />
-          </Field>
+          <ReasonField
+            disabled={isSaving}
+            label="Observación de cancelación"
+            maxLength={1000}
+            onChange={onChange}
+            options={[
+              'Reprogramación del abastecimiento',
+              'Mantenimiento de la red',
+              'Falta de disponibilidad de agua',
+              'Emergencia operativa',
+              'Condiciones climáticas',
+            ]}
+            required
+            value={confirmation.observacion || ''}
+          />
         )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -909,8 +919,7 @@ function StateDialog({ confirmation, isSaving, onChange, onClose, onConfirm }) {
           <button
             className={cancelling ? dangerButton : primaryButton}
             disabled={isSaving}
-            onClick={onConfirm}
-            type="button"
+            type="submit"
           >
             {isSaving
               ? 'Procesando...'
@@ -919,7 +928,7 @@ function StateDialog({ confirmation, isSaving, onChange, onClose, onConfirm }) {
                 : 'Marcar como completada'}
           </button>
         </div>
-      </div>
+      </form>
     </Dialog>
   )
 }
@@ -927,16 +936,22 @@ function StateDialog({ confirmation, isSaving, onChange, onClose, onConfirm }) {
 function Dialog({ children, description, onClose, title }) {
   const dialogRef = useRef(null)
 
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   useEffect(() => {
     dialogRef.current?.focus()
 
     function handleKey(event) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
 
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
+  }, [])
 
   return (
     <div
