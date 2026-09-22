@@ -4,6 +4,8 @@ namespace Panyebar.Application.DashboardReportes;
 
 public interface IDashboardReportesService
 {
+    Task<ConsultaResult<IReadOnlyList<RecaudacionSectorDto>>> GetRecaudacionPorSectorAsync(
+        DateOnly? fechaDesde, DateOnly? fechaHasta, CancellationToken cancellationToken = default);
     Task<ConsultaResult<DashboardResumenDto>> GetResumenAsync(
         int anio, int mes, CancellationToken cancellationToken = default);
     Task<ConsultaResult<IReadOnlyList<ReportePagoDto>>> GetPagosAsync(
@@ -24,6 +26,8 @@ public sealed record DashboardResumenDto(
 public sealed record ReportePagoDto(
     int PagoId, DateTime Fecha, string Concepto, decimal Monto, EstadoPago Estado,
     int UsuarioAdministrativoId);
+
+public sealed record RecaudacionSectorDto(int SectorId, string NombreSector, decimal MontoTotal);
 
 // Titularidad XOR: NombrePersona corresponde a PersonaId; Nis corresponde a SuministroId.
 public sealed record ReporteObligacionPendienteDto(

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../app/useAuth.js'
+import EmptyState from '../components/ui/EmptyState.jsx'
 import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Panel from '../components/ui/Panel.jsx'
-import { getDashboardResumen } from '../services/dashboardReporteService.js'
+import { getDashboardResumen, getRecaudacionPorSector } from '../services/dashboardReporteService.js'
 import { guatemalaToday } from '../utils/dateTime.js'
 
 const monthNames = [
@@ -30,65 +31,77 @@ function currentPeriod() {
   }
 }
 
+function periodDateRange({ anio, mes }) {
+  const leapYear = anio % 4 === 0 && (anio % 100 !== 0 || anio % 400 === 0)
+  const days = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  const prefix = `${String(anio).padStart(4, '0')}-${String(mes).padStart(2, '0')}`
+
+  return { fechaDesde: `${prefix}-01`, fechaHasta: `${prefix}-${days[mes - 1]}` }
+}
+
 function DashboardPage() {
   const { authenticatedRequest } = useAuth()
   const requestRef = useRef(authenticatedRequest)
+  const periodRequestRef = useRef(0)
   const [period, setPeriod] = useState(currentPeriod)
   const [appliedPeriod, setAppliedPeriod] = useState(currentPeriod)
   const [summary, setSummary] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [sectorRevenue, setSectorRevenue] = useState([])
+  const [isRevenueLoading, setIsRevenueLoading] = useState(true)
+  const [revenueError, setRevenueError] = useState(null)
 
   const loadSummary = useCallback(async (selectedPeriod) => {
-    setIsLoading(true)
-    setError(null)
+    const requestId = ++periodRequestRef.current
 
-    try {
-      const data = await getDashboardResumen(
-        requestRef.current,
-        selectedPeriod.anio,
-        selectedPeriod.mes,
-      )
-
-      setSummary(data)
-    } catch (requestError) {
-      setError(getRequestMessage(requestError))
-      setSummary(null)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    const selectedPeriod = currentPeriod()
-
-    let cancelled = false
-
-    async function loadInitialSummary() {
+    async function loadTotals() {
       try {
-        const data = await getDashboardResumen(
-          requestRef.current,
-          selectedPeriod.anio,
-          selectedPeriod.mes,
-        )
-
-        if (!cancelled) setSummary(data)
+        const data = await getDashboardResumen(requestRef.current, selectedPeriod.anio, selectedPeriod.mes)
+        if (requestId === periodRequestRef.current) setSummary(data)
       } catch (requestError) {
-        if (!cancelled) {
-          setError(getRequestMessage(requestError))
-          setSummary(null)
-        }
+        if (requestId === periodRequestRef.current) setError(getRequestMessage(requestError))
       } finally {
-        if (!cancelled) setIsLoading(false)
+        if (requestId === periodRequestRef.current) setIsLoading(false)
       }
     }
 
-    loadInitialSummary()
+    async function loadRevenue() {
+      try {
+        const data = await getRecaudacionPorSector(requestRef.current, periodDateRange(selectedPeriod))
+        if (requestId === periodRequestRef.current) setSectorRevenue(Array.isArray(data) ? data : [])
+      } catch (requestError) {
+        if (requestId === periodRequestRef.current) {
+          setRevenueError(requestError?.status === 403
+            ? 'No tienes permiso para consultar la recaudación por sector.'
+            : 'No se pudo cargar la recaudación por sector. Vuelve a consultar el período.')
+        }
+      } finally {
+        if (requestId === periodRequestRef.current) setIsRevenueLoading(false)
+      }
+    }
+
+    await Promise.all([loadTotals(), loadRevenue()])
+  }, [])
+
+  useEffect(() => {
+    loadSummary(currentPeriod())
 
     return () => {
-      cancelled = true
+      periodRequestRef.current += 1
     }
-  }, [])
+  }, [loadSummary])
+
+  function consultPeriod(selectedPeriod) {
+    setAppliedPeriod(selectedPeriod)
+    setIsLoading(true)
+    setError(null)
+    setSummary(null)
+    setIsRevenueLoading(true)
+    setRevenueError(null)
+    setSectorRevenue([])
+    loadSummary(selectedPeriod)
+  }
 
   function changePeriod(event) {
     const { name, value } = event.target
@@ -118,16 +131,14 @@ function DashboardPage() {
     }
 
     const nextPeriod = { ...period }
-    setAppliedPeriod(nextPeriod)
-    loadSummary(nextPeriod)
+    consultPeriod(nextPeriod)
   }
 
   function restoreCurrentPeriod() {
     const nextPeriod = currentPeriod()
 
     setPeriod(nextPeriod)
-    setAppliedPeriod(nextPeriod)
-    loadSummary(nextPeriod)
+    consultPeriod(nextPeriod)
   }
 
   const cards = [
@@ -263,6 +274,39 @@ function DashboardPage() {
       </div>
 
       <Panel>
+        <h2 className="text-base font-semibold text-slate-900">Recaudación por sector</h2>
+        <p className="mt-1 text-sm leading-6 text-slate-500">
+          Pagos registrados aplicados a obligaciones de suministros durante el período seleccionado.
+        </p>
+        <div className="mt-5">
+          {isRevenueLoading ? (
+            <LoadingState message="Cargando recaudación..." />
+          ) : revenueError ? (
+            <Alert message={revenueError} />
+          ) : (
+            <>
+              <dl className="mb-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md bg-slate-50 p-3">
+                  <dt className="text-xs text-slate-500">Recaudación atribuible a suministros</dt>
+                  <dd className="mt-1 break-words text-lg font-semibold text-slate-900">
+                    {formatMoney(sectorRevenue.reduce((total, row) => total + Number(row.montoTotal), 0))}
+                  </dd>
+                </div>
+                <div className="rounded-md bg-slate-50 p-3">
+                  <dt className="text-xs text-slate-500">Sectores con recaudación</dt>
+                  <dd className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(sectorRevenue.length)}</dd>
+                </div>
+              </dl>
+              <SectorRevenueChart rows={sectorRevenue} />
+            </>
+          )}
+        </div>
+        <p className="mt-4 text-xs leading-5 text-slate-500">
+          Excluye pagos anulados y obligaciones personales sin suministro.
+        </p>
+      </Panel>
+
+      <Panel>
         <h2 className="text-base font-semibold text-slate-900">Alcance del resumen</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
           Las obligaciones mostradas aquí son únicamente las generadas durante el período
@@ -275,6 +319,30 @@ function DashboardPage() {
 }
 
 const inputClass = 'mt-1.5 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20'
+
+function SectorRevenueChart({ rows }) {
+  if (rows.length === 0) {
+    return <EmptyState title="Sin recaudación por sector" description="No hay pagos registrados por sector para el período seleccionado." />
+  }
+
+  const maximum = Math.max(...rows.map((row) => row.montoTotal), 1)
+
+  return (
+    <div className="overflow-x-auto rounded-md focus:outline-none focus:ring-2 focus:ring-[#28727a]" tabIndex={0} role="region" aria-label="Gráfica de recaudación por sector, montos en quetzales">
+      <ul className="flex min-w-full items-start gap-4 px-2 pb-2" style={{ width: `${rows.length * 128}px` }}>
+        {rows.map((row) => (
+          <li className="min-w-0 flex-1 text-center" key={row.sectorId}>
+            <p className="mb-2 break-words text-xs font-semibold tabular-nums text-slate-800">{formatMoney(row.montoTotal)}</p>
+            <div className="flex h-48 items-end justify-center border-b border-slate-300 bg-slate-50" aria-hidden="true">
+              <div className="w-12 rounded-t-md bg-[#28727a] sm:w-16" style={{ height: `${(row.montoTotal / maximum) * 100}%` }} />
+            </div>
+            <p className="mt-3 break-words text-sm font-medium text-slate-700">{row.nombreSector}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 function Alert({ message }) {
   return (

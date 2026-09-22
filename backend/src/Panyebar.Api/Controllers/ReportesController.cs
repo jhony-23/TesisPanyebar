@@ -21,6 +21,14 @@ public sealed class ReportesController : ControllerBase
         return result.Succeeded ? Ok(result.Value) : BadRequest(new { message = "El rango de fechas no es válido." });
     }
 
+    [HttpGet("recaudacion-por-sector")]
+    public async Task<IActionResult> GetRecaudacionPorSector([FromQuery] DateOnly? fechaDesde,
+        [FromQuery] DateOnly? fechaHasta, CancellationToken cancellationToken)
+    {
+        var result = await _service.GetRecaudacionPorSectorAsync(fechaDesde, fechaHasta, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : BadRequest(new { message = "El rango de fechas no es válido." });
+    }
+
     [HttpGet("obligaciones-pendientes")]
     public async Task<IActionResult> GetObligacionesPendientes(CancellationToken cancellationToken) =>
         Ok(await _service.GetObligacionesPendientesAsync(cancellationToken));

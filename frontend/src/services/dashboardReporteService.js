@@ -24,6 +24,10 @@ export function getReportePagos(authenticatedRequest, filters = {}) {
   return authenticatedRequest(`${reportesPath}/pagos${reportQuery(filters)}`)
 }
 
+export function getRecaudacionPorSector(authenticatedRequest, filters = {}) {
+  return authenticatedRequest(`${reportesPath}/recaudacion-por-sector${reportQuery(filters)}`)
+}
+
 export function getReporteObligacionesPendientes(authenticatedRequest) {
   return authenticatedRequest(`${reportesPath}/obligaciones-pendientes`)
 }

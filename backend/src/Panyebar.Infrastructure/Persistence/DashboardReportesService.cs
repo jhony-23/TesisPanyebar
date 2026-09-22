@@ -58,6 +58,44 @@ public sealed class DashboardReportesService : IDashboardReportesService
 
     private sealed record TotalesMes(int Cantidad, decimal Monto);
 
+    public async Task<ConsultaResult<IReadOnlyList<RecaudacionSectorDto>>> GetRecaudacionPorSectorAsync(
+        DateOnly? fechaDesde, DateOnly? fechaHasta, CancellationToken cancellationToken = default)
+    {
+        if (!ValidRange(fechaDesde, fechaHasta))
+            return ConsultaResult<IReadOnlyList<RecaudacionSectorDto>>.Invalid();
+
+        return ConsultaResult<IReadOnlyList<RecaudacionSectorDto>>.Success(
+            await RecaudacionPorSectorQuery(fechaDesde, fechaHasta).ToListAsync(cancellationToken));
+    }
+
+    private IQueryable<RecaudacionSectorDto> RecaudacionPorSectorQuery(DateOnly? from, DateOnly? to)
+    {
+        var query = _dbContext.AplicacionesPago.AsNoTracking()
+            .Where(a => a.Pago!.Estado == EstadoPago.Registrado &&
+                a.Obligacion!.SuministroId != null);
+        if (from.HasValue)
+        {
+            var start = UtcStart(from.Value);
+            query = query.Where(a => a.Pago!.Fecha >= start);
+        }
+        if (to.HasValue && to.Value < DateOnly.MaxValue)
+        {
+            var end = UtcStart(to.Value.AddDays(1));
+            query = query.Where(a => a.Pago!.Fecha < end);
+        }
+
+        // Cada aplicación cancela una obligación completa: su monto histórico es el aplicado.
+        // Las aplicaciones de pagos anulados se conservan, pero no representan recaudación.
+        return query.GroupBy(a => new
+            {
+                a.Obligacion!.Suministro!.SectorId,
+                NombreSector = a.Obligacion.Suministro.Sector!.Nombre
+            })
+            .OrderBy(g => g.Key.NombreSector).ThenBy(g => g.Key.SectorId)
+            .Select(g => new RecaudacionSectorDto(
+                g.Key.SectorId, g.Key.NombreSector, g.Sum(a => a.Obligacion!.Monto)));
+    }
+
     public async Task<ConsultaResult<IReadOnlyList<ReportePagoDto>>> GetPagosAsync(
         DateOnly? fechaDesde, DateOnly? fechaHasta, CancellationToken cancellationToken = default)
     {

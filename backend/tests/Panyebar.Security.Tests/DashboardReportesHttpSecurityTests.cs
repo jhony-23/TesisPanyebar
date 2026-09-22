@@ -74,6 +74,7 @@ public sealed class DashboardReportesHttpSecurityTests : IAsyncLifetime
 
     [Theory]
     [InlineData("/api/reportes/pagos", "2", "1")]
+    [InlineData("/api/reportes/recaudacion-por-sector", "2", "1")]
     [InlineData("/api/reportes/obligaciones-pendientes", "2", "1")]
     [InlineData("/api/reportes/jornadas", "2", "1")]
     [InlineData("/api/dashboard/resumen?anio=2026&mes=9", "1", "2")]
@@ -91,6 +92,8 @@ public sealed class DashboardReportesHttpSecurityTests : IAsyncLifetime
 
     [Theory]
     [InlineData("/api/reportes/pagos?fechaDesde=2026-09-17&fechaHasta=2026-09-16")]
+    [InlineData("/api/reportes/recaudacion-por-sector?fechaDesde=2026-09-17&fechaHasta=2026-09-16")]
+    [InlineData("/api/reportes/recaudacion-por-sector?fechaDesde=2026-13-01")]
     [InlineData("/api/reportes/jornadas?fechaDesde=2026-09-17&fechaHasta=2026-09-16")]
     [InlineData("/api/reportes/pagos?fechaDesde=2026-13-01")]
     [InlineData("/api/reportes/jornadas?fechaHasta=2026-02-30")]

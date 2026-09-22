@@ -191,6 +191,132 @@ public sealed class DashboardReportesServiceTests
         (IQueryable<T>)typeof(DashboardReportesService).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(service, args)!;
 
+    [Fact]
+    public async Task SectorRevenue_TwoPaymentsInSameSectorAreSummed()
+    {
+        using var db = SectorContext();
+        AddAppliedPayment(db, 1, 1, 12.50m);
+        AddAppliedPayment(db, 2, 1, 30m);
+        db.SaveChanges();
+        db.ChangeTracker.Clear();
+        var rows = (await new DashboardReportesService(db).GetRecaudacionPorSectorAsync(null, null)).Value!;
+        Assert.Equal(new RecaudacionSectorDto(1, "Sector A", 42.50m), Assert.Single(rows));
+        Assert.Empty(db.ChangeTracker.Entries());
+        Assert.Empty(db.Auditorias);
+    }
+
+    [Fact]
+    public async Task SectorRevenue_DifferentSectorsRemainSeparate()
+    {
+        using var db = SectorContext();
+        AddAppliedPayment(db, 1, 1, 20m);
+        AddAppliedPayment(db, 2, 2, 35m);
+        db.SaveChanges();
+        var rows = (await new DashboardReportesService(db).GetRecaudacionPorSectorAsync(null, null)).Value!;
+        Assert.Equal(new[] { new RecaudacionSectorDto(1, "Sector A", 20m),
+            new RecaudacionSectorDto(2, "Sector B", 35m) }, rows);
+    }
+
+    [Fact]
+    public async Task SectorRevenue_MultipleApplicationsDoNotMultiplyPaymentTotal()
+    {
+        using var db = SectorContext();
+        AddAppliedPayment(db, 1, 1, 20m);
+        db.Pagos.Local.Single().Monto = 55m;
+        db.Obligaciones.Add(new Obligacion { Id = 2, SuministroId = 1, Monto = 35m, Estado = EstadoObligacion.Pagada });
+        db.AplicacionesPago.Add(new AplicacionPago { Id = 2, PagoId = 1, ObligacionId = 2 });
+        db.SaveChanges();
+        var rows = (await new DashboardReportesService(db).GetRecaudacionPorSectorAsync(null, null)).Value!;
+        Assert.Equal(55m, Assert.Single(rows).MontoTotal);
+    }
+
+    [Fact]
+    public async Task SectorRevenue_PersonalObligationHasNoSectorEvenWithRelatedSupply()
+    {
+        using var db = SectorContext();
+        db.Personas.Add(new Persona { Id = 1 });
+        db.PersonaSuministros.Add(new PersonaSuministro { Id = 1, PersonaId = 1, SuministroId = 1 });
+        AddAppliedPayment(db, 1, null, 30m);
+        db.SaveChanges();
+        Assert.Empty((await new DashboardReportesService(db).GetRecaudacionPorSectorAsync(null, null)).Value!);
+    }
+
+    [Fact]
+    public async Task SectorRevenue_AnnulledHistoricalApplicationDoesNotCountAgainAfterRepayment()
+    {
+        using var db = SectorContext();
+        AddAppliedPayment(db, 1, 1, 30m);
+        db.Pagos.Local.Single().Estado = EstadoPago.Anulado;
+        db.SaveChanges();
+        var service = new DashboardReportesService(db);
+        Assert.Empty((await service.GetRecaudacionPorSectorAsync(null, null)).Value!);
+        db.Pagos.Add(Payment(2, Start, 30m));
+        db.AplicacionesPago.Add(new AplicacionPago { Id = 2, PagoId = 2, ObligacionId = 1 });
+        db.SaveChanges();
+        Assert.Equal(30m, Assert.Single((await service.GetRecaudacionPorSectorAsync(null, null)).Value!).MontoTotal);
+        Assert.Equal(2, db.AplicacionesPago.Count());
+    }
+
+    [Fact]
+    public async Task SectorRevenue_DateRangeUsesPaymentDateAndInclusiveGuatemalaDays()
+    {
+        using var db = SectorContext();
+        var dates = new[] { Start.AddTicks(-1), Start, Start.AddDays(1).AddTicks(-1), Start.AddDays(1) };
+        for (var i = 0; i < dates.Length; i++)
+            AddAppliedPayment(db, i + 1, 1, (i + 1) * 10m, dates[i]);
+        db.SaveChanges();
+        var service = new DashboardReportesService(db);
+        Assert.Equal(50m, Assert.Single((await service.GetRecaudacionPorSectorAsync(Day, Day)).Value!).MontoTotal);
+        Assert.Equal(90m, Assert.Single((await service.GetRecaudacionPorSectorAsync(Day, null)).Value!).MontoTotal);
+        Assert.Equal(60m, Assert.Single((await service.GetRecaudacionPorSectorAsync(null, Day)).Value!).MontoTotal);
+        Assert.Equal(100m, Assert.Single((await service.GetRecaudacionPorSectorAsync(null, null)).Value!).MontoTotal);
+    }
+
+    [Fact]
+    public async Task SectorRevenue_EmptyInvalidAndExtremeRangesAreHandled()
+    {
+        using var db = Context();
+        var service = new DashboardReportesService(db);
+        Assert.Empty((await service.GetRecaudacionPorSectorAsync(null, null)).Value!);
+        Assert.False((await service.GetRecaudacionPorSectorAsync(Day.AddDays(1), Day)).Succeeded);
+        Assert.True((await service.GetRecaudacionPorSectorAsync(DateOnly.MinValue, DateOnly.MaxValue)).Succeeded);
+    }
+
+    [Fact]
+    public void SectorRevenue_SqlServerTranslatesJoinsFiltersAndAggregation()
+    {
+        using var db = new PanyebarDbContext(new DbContextOptionsBuilder<PanyebarDbContext>()
+            .UseSqlServer("Server=dummy;Database=dummy;Trusted_Connection=True;").Options);
+        var sql = Query<RecaudacionSectorDto>(new DashboardReportesService(db),
+            "RecaudacionPorSectorQuery", Day, Day).ToQueryString();
+        Assert.Contains("SUM(", sql);
+        Assert.Contains("GROUP BY", sql);
+        Assert.Contains("JOIN", sql);
+        Assert.Contains("[Estado] = 1", sql);
+        Assert.Contains("IS NOT NULL", sql);
+        Assert.Contains("06:00:00", sql);
+        Assert.Contains("[Sectores]", sql);
+        Assert.Contains("[AplicacionesPago]", sql);
+    }
+
+    private static PanyebarDbContext SectorContext()
+    {
+        var db = Context();
+        db.Sectores.AddRange(new Sector { Id = 1, Nombre = "Sector A" }, new Sector { Id = 2, Nombre = "Sector B" });
+        db.Suministros.AddRange(new Suministro { Id = 1, SectorId = 1 }, new Suministro { Id = 2, SectorId = 2 });
+        return db;
+    }
+
+    private static void AddAppliedPayment(PanyebarDbContext db, int id, int? supply, decimal amount, DateTime? date = null)
+    {
+        db.Pagos.Add(Payment(id, date ?? Start, amount));
+        db.Obligaciones.Add(new Obligacion { Id = id, SuministroId = supply,
+            PersonaId = supply.HasValue ? null : 1, Monto = amount, Estado = EstadoObligacion.Pagada,
+            Origen = supply.HasValue ? OrigenObligacion.CuotaOrdinaria : OrigenObligacion.Jornada,
+            FechaGeneracion = Start.AddMonths(-1) });
+        db.AplicacionesPago.Add(new AplicacionPago { Id = id, PagoId = id, ObligacionId = id });
+    }
+
     private static PanyebarDbContext Context() => new(new DbContextOptionsBuilder<PanyebarDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
