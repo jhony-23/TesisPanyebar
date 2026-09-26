@@ -36,7 +36,9 @@ public sealed record SuministroQrDto(
 public sealed record SuministroQrPublicDto(
     string Nis,
     string SectorNombre,
-    EstadoSuministro Estado);
+    EstadoSuministro Estado,
+    int CantidadObligacionesPendientes,
+    decimal TotalPendiente);
 
 public sealed record ResponsableActualDto(
     int PersonaId,

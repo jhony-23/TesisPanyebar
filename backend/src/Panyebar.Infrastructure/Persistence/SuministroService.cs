@@ -116,7 +116,16 @@ public sealed class SuministroService : ISuministroService
             select new SuministroQrPublicDto(
                 supply.Nis,
                 sector.Nombre,
-                supply.Estado))
+                supply.Estado,
+                _dbContext.Obligaciones.Count(o =>
+                    o.SuministroId == supply.Id &&
+                    o.PersonaId == null &&
+                    o.Estado == EstadoObligacion.Pendiente),
+                _dbContext.Obligaciones.Where(o =>
+                    o.SuministroId == supply.Id &&
+                    o.PersonaId == null &&
+                    o.Estado == EstadoObligacion.Pendiente)
+                    .Sum(o => (decimal?)o.Monto) ?? 0m))
             .SingleOrDefaultAsync(cancellationToken);
     }
 

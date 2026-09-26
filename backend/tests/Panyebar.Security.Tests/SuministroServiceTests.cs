@@ -348,11 +348,65 @@ public class SuministroServiceTests
         Assert.Equal("PAN-000010", result!.Nis);
         Assert.Equal("Panyebar Centro", result.SectorNombre);
         Assert.Equal(EstadoSuministro.Activo, result.Estado);
+        Assert.Equal(0, result.CantidadObligacionesPendientes);
+        Assert.Equal(0m, result.TotalPendiente);
         Assert.Null(missing);
         Assert.Null(malformed);
         Assert.Equal(
-            new[] { nameof(SuministroQrPublicDto.Estado), nameof(SuministroQrPublicDto.Nis), nameof(SuministroQrPublicDto.SectorNombre) },
+            new[] { nameof(SuministroQrPublicDto.CantidadObligacionesPendientes), nameof(SuministroQrPublicDto.Estado), nameof(SuministroQrPublicDto.Nis), nameof(SuministroQrPublicDto.SectorNombre), nameof(SuministroQrPublicDto.TotalPendiente) },
             typeof(SuministroQrPublicDto).GetProperties().Select(property => property.Name).OrderBy(name => name));
+    }
+
+    [Fact]
+    public async Task GetPublicByQrTokenAsync_CountsOnlyPendingSupplyObligationsAndReflectsStateChanges()
+    {
+        await using var dbContext = CreateContext();
+        dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Centro" });
+        dbContext.Suministros.AddRange(
+            new Suministro { Id = 10, SectorId = 1, Nis = "PAN-000010", CodigoQrToken = "token-10" },
+            new Suministro { Id = 11, SectorId = 1, Nis = "PAN-000011", CodigoQrToken = "token-11" });
+        dbContext.Personas.Add(new Persona { Id = 4, Nombres = "Ana", Apellidos = "Pérez" });
+        dbContext.PersonaSuministros.Add(new PersonaSuministro
+        {
+            PersonaId = 4,
+            SuministroId = 10,
+            Estado = EstadoRelacionSuministro.Vigente
+        });
+        var firstPending = new Obligacion { SuministroId = 10, Monto = 30m };
+        var secondPending = new Obligacion { SuministroId = 10, Monto = 30m };
+        dbContext.Obligaciones.AddRange(
+            firstPending,
+            secondPending,
+            new Obligacion { PersonaId = 4, Monto = 100m, Origen = OrigenObligacion.Jornada },
+            new Obligacion { SuministroId = 10, Monto = 200m, Estado = EstadoObligacion.Pagada },
+            new Obligacion { SuministroId = 10, Monto = 300m, Estado = EstadoObligacion.Anulada },
+            new Obligacion { SuministroId = 11, Monto = 400m });
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, "unused", "unused");
+
+        var result = await service.GetPublicByQrTokenAsync("token-10");
+        Assert.NotNull(result);
+        Assert.Equal(2, result.CantidadObligacionesPendientes);
+        Assert.Equal(60m, result.TotalPendiente);
+
+        firstPending.Estado = EstadoObligacion.Pagada;
+        await dbContext.SaveChangesAsync();
+        result = await service.GetPublicByQrTokenAsync("token-10");
+        Assert.Equal(1, result!.CantidadObligacionesPendientes);
+        Assert.Equal(30m, result.TotalPendiente);
+
+        firstPending.Estado = EstadoObligacion.Pendiente;
+        await dbContext.SaveChangesAsync();
+        result = await service.GetPublicByQrTokenAsync("token-10");
+        Assert.Equal(2, result!.CantidadObligacionesPendientes);
+        Assert.Equal(60m, result.TotalPendiente);
+
+        firstPending.Estado = EstadoObligacion.Pagada;
+        secondPending.Estado = EstadoObligacion.Anulada;
+        await dbContext.SaveChangesAsync();
+        result = await service.GetPublicByQrTokenAsync("token-10");
+        Assert.Equal(0, result!.CantidadObligacionesPendientes);
+        Assert.Equal(0m, result.TotalPendiente);
     }
 
     [Fact]

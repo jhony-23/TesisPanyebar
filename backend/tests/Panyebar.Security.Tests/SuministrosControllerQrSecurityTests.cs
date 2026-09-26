@@ -47,7 +47,9 @@ public sealed class SuministrosControllerQrSecurityTests
         var expected = new SuministroQrPublicDto(
             "PAN-000010",
             "Panyebar Centro",
-            EstadoSuministro.Activo);
+            EstadoSuministro.Activo,
+            2,
+            60m);
         var controller = new SuministrosController(new PublicQrStub(expected));
 
         var result = await controller.GetPublicByQrToken("valid-token", CancellationToken.None);

@@ -88,6 +88,8 @@ function FoundContent({ isAuthenticated, suministro }) {
             {estado}
           </dd>
         </div>
+        <Detail label="Obligaciones pendientes" value={suministro.cantidadObligacionesPendientes} />
+        <Detail label="Total pendiente" value={`Q${suministro.totalPendiente.toFixed(2)}`} />
       </dl>
 
       <p className="mt-5 flex items-center justify-center gap-2 text-sm font-semibold text-emerald-700">
