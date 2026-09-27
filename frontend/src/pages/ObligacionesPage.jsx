@@ -18,6 +18,16 @@ function ObligacionesPage() {
   const canManage = hasPermission(PERMISOS.OBLIGACIONES_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [obligaciones, setObligaciones] = useState([])
+  const [search, setSearch] = useState('')
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredItems = obligaciones.filter((item) =>
+    (item.concepto ?? '').toLowerCase().includes(normalizedSearch),
+  )
+  if (filteredItems.some((item, index) => index > 0 &&
+    Date.parse(item.fechaGeneracion) > Date.parse(filteredItems[index - 1].fechaGeneracion))) {
+    filteredItems.sort((first, second) => Date.parse(second.fechaGeneracion) - Date.parse(first.fechaGeneracion))
+  }
+
   const [cuotas, setCuotas] = useState([])
   const [suministros, setSuministros] = useState([])
   const [form, setForm] = useState(initialForm)
@@ -174,8 +184,9 @@ function ObligacionesPage() {
 
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-base font-semibold text-slate-900">Obligaciones registradas</h2><p className="mt-1 text-sm text-slate-500">{obligaciones.length} {obligaciones.length === 1 ? 'obligación' : 'obligaciones'}</p></div><div className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">La morosidad mostrada proviene del servidor.</div></div>
+        <input aria-label="Buscar obligación" className="mt-4 block min-h-11 w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" onChange={(event) => { setSearch(event.target.value) }} placeholder="Buscar obligación..." type="search" value={search} />
         <div className="mt-5">
-          {isLoading ? <LoadingState message="Cargando obligaciones..." /> : obligaciones.length === 0 ? <EmptyState description="Las obligaciones generadas desde cuotas aparecerán aquí." title="No hay obligaciones registradas" /> : <ObligationList cuotaById={cuotaById} isSaving={isSaving} obligaciones={obligaciones} onAnnul={setPendingAnnulment} supplyById={supplyById} />}
+          {isLoading ? <LoadingState message="Cargando obligaciones..." /> : obligaciones.length === 0 ? <EmptyState description="Las obligaciones generadas desde cuotas aparecerán aquí." title="No hay obligaciones registradas" /> : filteredItems.length === 0 ? <EmptyState description="Prueba con otro texto de búsqueda." title="No hay coincidencias" /> : <ObligationList cuotaById={cuotaById} isSaving={isSaving} obligaciones={filteredItems} onAnnul={setPendingAnnulment} supplyById={supplyById} />}
         </div>
       </Panel>
 

@@ -23,6 +23,12 @@ function CuotasPage() {
   const canManage = hasPermission(PERMISOS.CUOTAS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [cuotas, setCuotas] = useState([])
+  const [search, setSearch] = useState('')
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredItems = cuotas.filter((item) =>
+    (item.nombre ?? '').toLowerCase().includes(normalizedSearch),
+  )
+
   const [form, setForm] = useState(initialForm)
   const [editingId, setEditingId] = useState(null)
   const [pendingStatus, setPendingStatus] = useState(null)
@@ -158,11 +164,14 @@ function CuotasPage() {
         <Panel>
           <h2 className="text-base font-semibold text-slate-900">Cuotas registradas</h2>
           <p className="mt-1 text-sm text-slate-500">{cuotas.length} {cuotas.length === 1 ? 'cuota' : 'cuotas'}</p>
+          <input aria-label="Buscar cuota" className="mt-4 block min-h-11 w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" onChange={(event) => { setSearch(event.target.value) }} placeholder="Buscar cuota..." type="search" value={search} />
           <div className="mt-5">
             {isLoading ? <LoadingState message="Cargando cuotas..." /> : cuotas.length === 0 ? (
               <EmptyState description="Crea la primera cuota para configurar un cobro administrativo." title="Aún no hay cuotas" />
+            ) : filteredItems.length === 0 ? (
+              <EmptyState description="Prueba con otro texto de búsqueda." title="No hay coincidencias" />
             ) : (
-              <CuotaList cuotas={cuotas} isSaving={isSaving} onEdit={editCuota} onStatus={setPendingStatus} />
+              <CuotaList cuotas={filteredItems} isSaving={isSaving} onEdit={editCuota} onStatus={setPendingStatus} />
             )}
           </div>
         </Panel>

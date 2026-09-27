@@ -35,6 +35,16 @@ function JornadasPage() {
   const requestRef = useRef(authenticatedRequest)
 
   const [jornadas, setJornadas] = useState([])
+  const [search, setSearch] = useState('')
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredItems = jornadas.filter((item) =>
+    (item.nombre ?? '').toLowerCase().includes(normalizedSearch),
+  )
+  if (filteredItems.some((item, index) => index > 0 &&
+    Date.parse(item.fecha) > Date.parse(filteredItems[index - 1].fecha))) {
+    filteredItems.sort((first, second) => Date.parse(second.fecha) - Date.parse(first.fecha))
+  }
+
   const [personas, setPersonas] = useState([])
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(initialForm)
@@ -354,6 +364,7 @@ function JornadasPage() {
             </div>
           </div>
 
+          <input aria-label="Buscar jornada" className="mt-4 block min-h-11 w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" onChange={(event) => { setSearch(event.target.value) }} placeholder="Buscar jornada..." type="search" value={search} />
           <div className="mt-5">
             {isLoading ? (
               <LoadingState message="Cargando jornadas..." />
@@ -362,9 +373,11 @@ function JornadasPage() {
                 description="Crea la primera jornada comunitaria para comenzar a registrar participantes."
                 title="Aún no hay jornadas"
               />
+            ) : filteredItems.length === 0 ? (
+              <EmptyState description="Prueba con otro texto de búsqueda." title="No hay coincidencias" />
             ) : (
               <JornadaList
-                jornadas={jornadas}
+                jornadas={filteredItems}
                 onEdit={startEdit}
                 onOpen={openDetail}
               />

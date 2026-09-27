@@ -30,8 +30,22 @@ function PagosPage() {
   const { authenticatedRequest, hasPermission } = useAuth()
   const canManage = hasPermission(PERMISOS.PAGOS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
+  const detailRef = useRef(null)
+  const scrollToDetailRef = useRef(false)
 
   const [pagos, setPagos] = useState([])
+  const [search, setSearch] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredItems = pagos.filter((item) =>
+    [item.titular?.nombre, item.titular?.nis, item.numeroComprobante, item.fecha, item.fecha ? formatGuatemalaDateTime(item.fecha) : ''].filter(Boolean).join(' ').toLowerCase().includes(normalizedSearch),
+  )
+  if (filteredItems.some((item, index) => index > 0 &&
+    Date.parse(item.fecha) > Date.parse(filteredItems[index - 1].fecha))) {
+    filteredItems.sort((first, second) => Date.parse(second.fecha) - Date.parse(first.fecha))
+  }
+  const visibleItems = showAll ? filteredItems : filteredItems.slice(0, 5)
+
   const [obligaciones, setObligaciones] = useState([])
   const [personas, setPersonas] = useState([])
   const [suministros, setSuministros] = useState([])
@@ -49,6 +63,13 @@ function PagosPage() {
   const [formError, setFormError] = useState(null)
   const [referenceError, setReferenceError] = useState(null)
   const [feedback, setFeedback] = useState(null)
+
+  useEffect(() => {
+    if (selected && !isDetailLoading && scrollToDetailRef.current) {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      scrollToDetailRef.current = false
+    }
+  }, [selected, isDetailLoading])
 
   useEffect(() => {
     let mounted = true
@@ -445,6 +466,7 @@ function PagosPage() {
     }
   }
   async function openPayment(id) {
+    scrollToDetailRef.current = false
     setIsDetailLoading(true)
     setError(null)
     setSelected(null)
@@ -458,6 +480,7 @@ function PagosPage() {
 
       setSelected(detail)
       setReceipt(receiptResult)
+      scrollToDetailRef.current = true
     } catch (requestError) {
       setError(
         getRequestMessage(
@@ -552,6 +575,7 @@ function PagosPage() {
           </div>
         </div>
 
+        <input aria-label="Buscar pago" className="mt-4 block min-h-11 w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" onChange={(event) => { setSearch(event.target.value); setShowAll(false) }} placeholder="Buscar pago..." type="search" value={search} />
         <div className="mt-5">
           {isLoading ? (
             <LoadingState message="Cargando pagos..." />
@@ -560,15 +584,22 @@ function PagosPage() {
               description="Los pagos registrados aparecerán aquí junto con su número de comprobante."
               title="No hay pagos registrados"
             />
+          ) : filteredItems.length === 0 ? (
+            <EmptyState description="Prueba con otro texto de búsqueda." title="No hay coincidencias" />
           ) : (
             <PaymentList
               isSaving={isSaving}
               onAnnul={setPendingAnnulment}
               onOpen={openPayment}
-              pagos={pagos}
+              pagos={visibleItems}
             />
           )}
         </div>
+        {!isLoading && filteredItems.length > 5 && (
+          <button className="mt-4 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#28727a]" onClick={() => setShowAll((current) => !current)} type="button">
+            {showAll ? 'Mostrar menos' : 'Mostrar más'}
+          </button>
+        )}
       </Panel>
 
       {isDetailLoading && (
@@ -578,10 +609,12 @@ function PagosPage() {
       )}
 
       {selected && !isDetailLoading && (
-        <PaymentDetail
-          payment={selected}
-          receipt={receipt}
-        />
+        <div className="scroll-mt-28" ref={detailRef}>
+          <PaymentDetail
+            payment={selected}
+            receipt={receipt}
+          />
+        </div>
       )}
 
       {canManage && pendingAnnulment && (

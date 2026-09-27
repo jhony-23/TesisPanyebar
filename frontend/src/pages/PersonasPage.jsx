@@ -25,6 +25,14 @@ function PersonasPage() {
   const canManage = hasPermission(PERMISOS.PERSONAS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [personas, setPersonas] = useState([])
+  const [search, setSearch] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredItems = personas.filter((item) =>
+    `${item.nombres ?? ''} ${item.apellidos ?? ''}`.toLowerCase().includes(normalizedSearch),
+  )
+  const visibleItems = showAll ? filteredItems : filteredItems.slice(0, 5)
+
   const [form, setForm] = useState(initialForm)
   const [editingId, setEditingId] = useState(null)
   const [pendingStatus, setPendingStatus] = useState(null)
@@ -155,11 +163,17 @@ function PersonasPage() {
         <Panel>
           <h2 className="text-base font-semibold text-slate-900">Personas registradas</h2>
           <p className="mt-1 text-sm text-slate-500">{personas.length} {personas.length === 1 ? 'persona' : 'personas'}</p>
+          <input aria-label="Buscar por nombre" className="mt-4 block min-h-11 w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" onChange={(event) => { setSearch(event.target.value); setShowAll(false) }} placeholder="Buscar por nombre..." type="search" value={search} />
           <div className="mt-5">
             {isLoading ? <LoadingState message="Cargando personas..." /> : personas.length === 0 ? (
               <EmptyState description="Crea la primera persona para comenzar el registro comunitario." title="Aún no hay personas" />
-            ) : <PersonaList canManage={canManage} isSaving={isSaving} onEdit={editPersona} onStatus={setPendingStatus} personas={personas} />}
+            ) : filteredItems.length === 0 ? <EmptyState description="Prueba con otro texto de búsqueda." title="No hay coincidencias" /> : <PersonaList canManage={canManage} isSaving={isSaving} onEdit={editPersona} onStatus={setPendingStatus} personas={visibleItems} />}
           </div>
+          {!isLoading && filteredItems.length > 5 && (
+            <button className="mt-4 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#28727a]" onClick={() => setShowAll((current) => !current)} type="button">
+              {showAll ? 'Mostrar menos' : 'Mostrar más'}
+            </button>
+          )}
         </Panel>
 
         {canManage && (

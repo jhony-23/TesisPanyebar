@@ -29,6 +29,8 @@ function SuministrosPage() {
   const canManage = hasPermission(PERMISOS.SUMINISTROS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [suministros, setSuministros] = useState([])
+  const [showAll, setShowAll] = useState(false)
+  const visibleItems = showAll ? suministros : suministros.slice(0, 5)
   const [sectores, setSectores] = useState([])
   const [personas, setPersonas] = useState([])
   const [form, setForm] = useState(initialForm)
@@ -295,8 +297,13 @@ function SuministrosPage() {
           <h2 className="text-base font-semibold text-slate-900">Suministros registrados</h2>
           <p className="mt-1 text-sm text-slate-500">{suministros.length} {suministros.length === 1 ? 'suministro' : 'suministros'}</p>
           <div className="mt-5">
-            {isLoading ? <LoadingState message="Cargando suministros..." /> : suministros.length === 0 ? <EmptyState description="Los suministros creados aparecerán aquí." title="No hay suministros registrados" /> : <SupplyList canManage={canManage} isSaving={isSaving} isQrLoading={qrLoading} onEdit={editSuministro} onHistory={showHistory} onProcessHistory={showProcessHistory} onQr={showQr} onResponsible={openResponsibleForm} onProcess={setPendingProcess} suministros={suministros} />}
+            {isLoading ? <LoadingState message="Cargando suministros..." /> : suministros.length === 0 ? <EmptyState description="Los suministros creados aparecerán aquí." title="No hay suministros registrados" /> : <SupplyList canManage={canManage} isSaving={isSaving} isQrLoading={qrLoading} onEdit={editSuministro} onHistory={showHistory} onProcessHistory={showProcessHistory} onQr={showQr} onResponsible={openResponsibleForm} onProcess={setPendingProcess} suministros={visibleItems} />}
           </div>
+          {!isLoading && suministros.length > 5 && (
+            <button className="mt-4 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#28727a]" onClick={() => setShowAll((current) => !current)} type="button">
+              {showAll ? 'Mostrar menos' : 'Mostrar más'}
+            </button>
+          )}
         </Panel>
 
         {canManage && responsibleForm.suministroId !== null && (
