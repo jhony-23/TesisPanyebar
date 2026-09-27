@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../app/useAuth.js'
 import { getSuministroQrPublic } from '../services/suministroQrService.js'
+import comiteLogo from '../assets/branding/comite-agua-panyebar-white.png'
 
 const statusLabels = {
   1: 'Activo',
@@ -39,6 +40,7 @@ function SuministroQrPage() {
     <main className="mx-auto flex min-h-[calc(100vh-73px)] max-w-5xl items-center px-4 py-10 sm:px-6 sm:py-14">
       <section className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-[#123b43] px-6 py-7 text-center text-white sm:px-10">
+          <img alt="Comité de Agua Potable de Panyebar" className="mx-auto mb-4 h-16 w-16 rounded-lg object-cover" src={comiteLogo} />
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-100">Comité de Agua Potable</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">Panyebar</h1>
         </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../app/useAuth.js'
+import comiteLogo from '../assets/branding/comite-agua-panyebar.png'
 
 function LoginPage() {
   return (
@@ -54,6 +55,7 @@ function LoginForm() {
         </div>
         <form className="w-full space-y-5 p-6 sm:p-9 lg:p-10" onSubmit={handleSubmit}>
           <div>
+            <img alt="Comité de Agua Potable de Panyebar" className="mx-auto mb-4 h-16 w-16 rounded-lg object-cover" src={comiteLogo} />
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#28727a]">Acceso administrativo</p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Iniciar sesión</h1>
             <p className="mt-2 text-sm text-slate-500">Ingresa tus credenciales para continuar.</p>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import comiteLogo from '../assets/branding/comite-agua-panyebar-white.png'
 import { useAuth } from '../app/useAuth.js'
 import { PERMISOS } from '../app/permissions.js'
 import EmptyState from '../components/ui/EmptyState.jsx'
@@ -1252,13 +1253,15 @@ function ReceiptContent({
     >
       <div className="border-b border-slate-200 bg-[#123b43] px-5 py-5 text-white sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-lg font-semibold tracking-tight">
-              Panyebar
-            </p>
-            <p className="mt-1 text-xs text-teal-100/75">
-              Comité de Agua Potable
-            </p>
+          <div className="flex items-center gap-2">
+            <img alt="Comité de Agua Potable de Panyebar" className="h-20 w-20 shrink-0 rounded-md object-contain" src={comiteLogo} />
+            <div>
+              <p className="text-sm font-semibold tracking-wide">
+                COMITÉ DE AGUA POTABLE
+              </p>
+              <p className="mt-1 text-xs text-teal-100/75">Aldea Panyebar</p>
+              <p className="mt-1 text-xs text-teal-100/75">San Juan La Laguna, Sololá</p>
+            </div>
           </div>
 
           <div className="sm:text-right">

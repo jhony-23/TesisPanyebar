@@ -40,8 +40,16 @@ body {
   }
 
   #payment-print-root .payment-receipt-print > div:first-child {
+    background-color: #123b43 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  #payment-print-root .payment-receipt-print > div:first-child p {
+    color: white !important;
   }
 
   #payment-print-root .payment-receipt-print [class*="grid-cols-[1fr_130px_130px]"] {

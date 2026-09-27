@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../app/useAuth.js'
 import { NAVIGATION_ITEMS } from '../app/permissions.js'
+import comiteLogo from '../assets/branding/comite-agua-panyebar-white.png'
 
 function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -35,6 +36,7 @@ function AdminLayout() {
 
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-[#123b43] text-white transition-transform duration-200 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex h-20 items-center border-b border-white/10 px-6">
+          <img alt="Comité de Agua Potable de Panyebar" className="mr-2 h-16 w-16 shrink-0 rounded-md object-contain" src={comiteLogo} />
           <div>
             <p className="text-lg font-semibold tracking-tight">Panyebar</p>
             <p className="text-xs text-teal-100/70">Comité de agua potable</p>
