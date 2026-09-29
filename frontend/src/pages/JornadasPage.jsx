@@ -49,7 +49,6 @@ function JornadasPage() {
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(initialForm)
   const [editingId, setEditingId] = useState(null)
-  const [participantId, setParticipantId] = useState('')
   const [pendingCancel, setPendingCancel] = useState(false)
   const [pendingClose, setPendingClose] = useState(false)
 
@@ -203,8 +202,11 @@ function JornadasPage() {
     }
   }
 
-  async function addParticipant() {
-    if (!selected || !participantId) return
+  async function addParticipant(personaIds) {
+    if (!selected || isSaving) return false
+    const availableIds = new Set(availablePersonas.map((persona) => persona.id))
+    const ids = [...new Set(personaIds)].filter((id) => availableIds.has(id))
+    if (ids.length === 0) return false
 
     setIsSaving(true)
     setError(null)
@@ -214,14 +216,15 @@ function JornadasPage() {
       const updated = await addJornadaParticipants(
         authenticatedRequest,
         selected.id,
-        [Number(participantId)],
+        ids,
       )
       setSelected(updated)
       upsertSummary(updated)
-      setParticipantId('')
-      setFeedback('Participante agregado correctamente.')
+      setFeedback(ids.length === 1 ? 'Participante agregado correctamente.' : `${ids.length} participantes agregados correctamente.`)
+      return true
     } catch (requestError) {
-      setError(getRequestMessage(requestError, 'No se pudo agregar el participante.'))
+      setError(getRequestMessage(requestError, 'No se pudieron agregar los participantes.'))
+      return false
     } finally {
       setIsSaving(false)
     }
@@ -516,8 +519,7 @@ function JornadasPage() {
           onClose={() => setPendingClose(true)}
           onParticipantChange={updateParticipant}
           onParticipantRemove={removeParticipant}
-          participantId={participantId}
-          setParticipantId={setParticipantId}
+          key={selected.id}
         />
       )}
 
@@ -615,6 +617,8 @@ function JornadaList({ jornadas, onEdit, onOpen }) {
   )
 }
 
+const participantSelectionButtonClass = 'rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#28727a] disabled:opacity-60'
+
 function JornadaDetail({
   availablePersonas,
   canManage,
@@ -625,9 +629,42 @@ function JornadaDetail({
   onClose,
   onParticipantChange,
   onParticipantRemove,
-  participantId,
-  setParticipantId,
 }) {
+  const [participantSearch, setParticipantSearch] = useState('')
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState([])
+  const availableIds = new Set(availablePersonas.map((persona) => persona.id))
+  const selectedIds = selectedParticipantIds.filter((id) => availableIds.has(id))
+  const matchingPersonas = availablePersonas.filter((persona) =>
+    `${persona.nombres} ${persona.apellidos}`.toLowerCase().includes(participantSearch.trim().toLowerCase()),
+  )
+
+  function toggleParticipant(id, checked) {
+    setSelectedParticipantIds((current) => checked
+      ? [...new Set([...current, id])]
+      : current.filter((item) => item !== id))
+  }
+
+  function selectAllParticipants() {
+    setSelectedParticipantIds(availablePersonas.map((persona) => persona.id))
+  }
+
+  function selectParticipantResults() {
+    setSelectedParticipantIds((current) => [...new Set([...current, ...matchingPersonas.map((persona) => persona.id)])])
+  }
+
+  function clearParticipantSelection() {
+    setSelectedParticipantIds([])
+  }
+
+  async function submitParticipants(event) {
+    event.preventDefault()
+    if (isSaving || selectedIds.length === 0) return
+    if (await onAddParticipant(selectedIds)) {
+      clearParticipantSelection()
+      setParticipantSearch('')
+    }
+  }
+
   const planificada = jornada.estado === 1
   const pendingCount = jornada.participantes.filter((item) => item.resultado === 0).length
 
@@ -666,34 +703,46 @@ function JornadaDetail({
       </div>
 
       {canManage && planificada && (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 p-4">
-          <label className="text-sm font-medium text-slate-700" htmlFor="jornada-participante">
-            Agregar participante
-          </label>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <select
-              className={`${inputClass} mt-0 flex-1`}
-              id="jornada-participante"
-              onChange={(event) => setParticipantId(event.target.value)}
-              value={participantId}
-            >
-              <option value="">Selecciona una persona activa</option>
-              {availablePersonas.map((persona) => (
-                <option key={persona.id} value={persona.id}>
-                  {persona.nombres} {persona.apellidos}
-                </option>
+        <form className="mt-6 rounded-md border border-slate-200 bg-slate-50 p-4" onSubmit={submitParticipants}>
+          <fieldset disabled={isSaving} className="min-w-0">
+            <legend className="text-sm font-semibold text-slate-700">Agregar participantes</legend>
+            <input
+              aria-label="Buscar persona para agregar a la jornada"
+              className={inputClass}
+              onChange={(event) => setParticipantSearch(event.target.value)}
+              placeholder="Buscar persona..."
+              type="search"
+              value={participantSearch}
+            />
+            <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-md border border-slate-200 bg-white p-2">
+              {matchingPersonas.map((persona) => (
+                <label className="flex min-h-11 items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50" key={persona.id}>
+                  <input
+                    checked={selectedIds.includes(persona.id)}
+                    className="h-4 w-4 shrink-0 accent-[#123b43]"
+                    onChange={(event) => toggleParticipant(persona.id, event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span className="min-w-0 break-words">{persona.nombres} {persona.apellidos}</span>
+                </label>
               ))}
-            </select>
+              {matchingPersonas.length === 0 && <p className="p-2 text-sm text-slate-500">{availablePersonas.length === 0 ? 'No hay personas activas disponibles para agregar.' : 'No hay personas que coincidan con la búsqueda.'}</p>}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className={participantSelectionButtonClass} disabled={availablePersonas.length === 0} onClick={selectAllParticipants} type="button">Seleccionar todas</button>
+              {participantSearch.trim() && <button className={participantSelectionButtonClass} disabled={matchingPersonas.length === 0} onClick={selectParticipantResults} type="button">Seleccionar resultados</button>}
+              <button className={participantSelectionButtonClass} disabled={selectedIds.length === 0} onClick={clearParticipantSelection} type="button">Limpiar selección</button>
+            </div>
+            <p aria-live="polite" className="mt-3 text-sm text-slate-600">{selectedIds.length} personas seleccionadas</p>
             <button
-              className="rounded-md bg-[#d6a85f] px-4 py-2 text-sm font-semibold text-[#123b43] disabled:opacity-60"
-              disabled={isSaving || !participantId}
-              onClick={onAddParticipant}
-              type="button"
+              className="mt-3 rounded-md bg-[#d6a85f] px-4 py-2 text-sm font-semibold text-[#123b43] focus:outline-none focus:ring-2 focus:ring-[#d6a85f] disabled:opacity-60"
+              disabled={selectedIds.length === 0}
+              type="submit"
             >
-              Agregar
+              {isSaving ? 'Agregando...' : 'Agregar seleccionadas'}
             </button>
-          </div>
-        </div>
+          </fieldset>
+        </form>
       )}
 
       <div className="mt-6">
