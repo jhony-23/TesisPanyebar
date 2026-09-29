@@ -358,7 +358,7 @@ public class SuministroServiceTests
     }
 
     [Fact]
-    public async Task GetPublicByQrTokenAsync_CountsOnlyPendingSupplyObligationsAndReflectsStateChanges()
+    public async Task GetPublicByQrTokenAsync_CountsPendingSupplyAndCurrentResponsibleObligationsAndReflectsStateChanges()
     {
         await using var dbContext = CreateContext();
         dbContext.Sectores.Add(new Sector { Id = 1, Nombre = "Centro" });
@@ -386,27 +386,124 @@ public class SuministroServiceTests
 
         var result = await service.GetPublicByQrTokenAsync("token-10");
         Assert.NotNull(result);
-        Assert.Equal(2, result.CantidadObligacionesPendientes);
-        Assert.Equal(60m, result.TotalPendiente);
+        Assert.Equal(3, result.CantidadObligacionesPendientes);
+        Assert.Equal(160m, result.TotalPendiente);
 
         firstPending.Estado = EstadoObligacion.Pagada;
         await dbContext.SaveChangesAsync();
         result = await service.GetPublicByQrTokenAsync("token-10");
-        Assert.Equal(1, result!.CantidadObligacionesPendientes);
-        Assert.Equal(30m, result.TotalPendiente);
+        Assert.Equal(2, result!.CantidadObligacionesPendientes);
+        Assert.Equal(130m, result.TotalPendiente);
 
         firstPending.Estado = EstadoObligacion.Pendiente;
         await dbContext.SaveChangesAsync();
         result = await service.GetPublicByQrTokenAsync("token-10");
-        Assert.Equal(2, result!.CantidadObligacionesPendientes);
-        Assert.Equal(60m, result.TotalPendiente);
+        Assert.Equal(3, result!.CantidadObligacionesPendientes);
+        Assert.Equal(160m, result.TotalPendiente);
 
         firstPending.Estado = EstadoObligacion.Pagada;
         secondPending.Estado = EstadoObligacion.Anulada;
         await dbContext.SaveChangesAsync();
         result = await service.GetPublicByQrTokenAsync("token-10");
-        Assert.Equal(0, result!.CantidadObligacionesPendientes);
-        Assert.Equal(0m, result.TotalPendiente);
+        Assert.Equal(1, result!.CantidadObligacionesPendientes);
+        Assert.Equal(100m, result.TotalPendiente);
+    }
+
+    [Theory]
+    [InlineData(OrigenObligacion.Jornada)]
+    [InlineData(OrigenObligacion.Administrativa)]
+    [InlineData((OrigenObligacion)99)]
+    public async Task PublicQr_IncludesPersonalPendingRegardlessOfOrigin(OrigenObligacion origin)
+    {
+        await using var db = CreateContext();
+        await SeedPublicQrSummary(db);
+        db.Obligaciones.AddRange(
+            new Obligacion { SuministroId = 10, Monto = 30m },
+            new Obligacion { PersonaId = 1, Monto = 20m, Origen = origin });
+        await db.SaveChangesAsync();
+        var result = await CreateService(db, "unused", "unused").GetPublicByQrTokenAsync("token-10");
+        Assert.Equal(2, result!.CantidadObligacionesPendientes);
+        Assert.Equal(50m, result.TotalPendiente);
+    }
+
+    [Fact]
+    public async Task PublicQr_IncludesAllCurrentPersonalPendingAndExcludesOtherOwnersAndStates()
+    {
+        await using var db = CreateContext();
+        await SeedPublicQrSummary(db);
+        db.Obligaciones.AddRange(
+            new Obligacion { SuministroId = 10, Monto = 30m },
+            new Obligacion { PersonaId = 1, Monto = 20m, Origen = OrigenObligacion.Jornada },
+            new Obligacion { PersonaId = 1, Monto = 15m, Origen = OrigenObligacion.Administrativa },
+            new Obligacion { PersonaId = 1, Monto = 100m, Estado = EstadoObligacion.Pagada },
+            new Obligacion { PersonaId = 1, Monto = 200m, Estado = EstadoObligacion.Anulada },
+            new Obligacion { SuministroId = 10, Monto = 300m, Estado = EstadoObligacion.Pagada },
+            new Obligacion { SuministroId = 10, Monto = 400m, Estado = EstadoObligacion.Anulada },
+            new Obligacion { PersonaId = 2, Monto = 500m },
+            new Obligacion { PersonaId = 3, Monto = 600m },
+            new Obligacion { SuministroId = 11, Monto = 700m });
+        await db.SaveChangesAsync();
+        var result = await CreateService(db, "unused", "unused").GetPublicByQrTokenAsync("token-10");
+        Assert.Equal(3, result!.CantidadObligacionesPendientes);
+        Assert.Equal(65m, result.TotalPendiente);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublicQr_WithoutCurrentResponsibleUsesOnlySupplyEvenWithHistory(bool history)
+    {
+        await using var db = CreateContext();
+        await SeedPublicQrSummary(db);
+        db.PersonaSuministros.RemoveRange(await db.PersonaSuministros.ToListAsync());
+        if (history) db.PersonaSuministros.Add(new PersonaSuministro
+        {
+            PersonaId = 1, SuministroId = 10, Estado = EstadoRelacionSuministro.Finalizada,
+            FechaFin = DateTime.UtcNow
+        });
+        db.Obligaciones.AddRange(new Obligacion { SuministroId = 10, Monto = 30m },
+            new Obligacion { PersonaId = 1, Monto = 20m });
+        await db.SaveChangesAsync();
+        var result = await CreateService(db, "unused", "unused").GetPublicByQrTokenAsync("token-10");
+        Assert.Equal(1, result!.CantidadObligacionesPendientes);
+        Assert.Equal(30m, result.TotalPendiente);
+    }
+
+    [Fact]
+    public async Task PublicQr_ChangeOfResponsibleUpdatesSummaryWithoutChangingNisOrQr()
+    {
+        await using var db = CreateContext();
+        await SeedPublicQrSummary(db);
+        db.Obligaciones.AddRange(new Obligacion { SuministroId = 10, Monto = 30m },
+            new Obligacion { PersonaId = 1, Monto = 20m },
+            new Obligacion { PersonaId = 3, Monto = 70m });
+        db.UsuariosAdministrativos.Add(new UsuarioAdministrativo { Id = 8, NombreUsuario = "admin" });
+        await db.SaveChangesAsync();
+        var service = CreateService(db, "unused", "unused");
+        var qrBefore = await service.GetQrAsync(10);
+        Assert.Equal(50m, (await service.GetPublicByQrTokenAsync("token-10"))!.TotalPendiente);
+        Assert.True((await service.SetResponsableAsync(10, new SetResponsableInput(3), 8)).Succeeded);
+        var result = await service.GetPublicByQrTokenAsync("token-10");
+        Assert.Equal(2, result!.CantidadObligacionesPendientes);
+        Assert.Equal(100m, result.TotalPendiente);
+        Assert.Equal("PAN-000010", result.Nis);
+        Assert.Equal(qrBefore, await service.GetQrAsync(10));
+        Assert.Equal("token-10", (await db.Suministros.FindAsync(10))!.CodigoQrToken);
+    }
+
+    private static async Task SeedPublicQrSummary(PanyebarDbContext db)
+    {
+        db.Sectores.Add(new Sector { Id = 1, Nombre = "Centro" });
+        db.Suministros.AddRange(
+            new Suministro { Id = 10, SectorId = 1, Nis = "PAN-000010", CodigoQrToken = "token-10" },
+            new Suministro { Id = 11, SectorId = 1, Nis = "PAN-000011", CodigoQrToken = "token-11" });
+        db.Personas.AddRange(Enumerable.Range(1, 3).Select(id => new Persona
+        { Id = id, Nombres = "Privado", Apellidos = "Privado" }));
+        db.PersonaSuministros.AddRange(
+            new PersonaSuministro { PersonaId = 1, SuministroId = 10, Estado = EstadoRelacionSuministro.Vigente },
+            new PersonaSuministro { PersonaId = 2, SuministroId = 10, Estado = EstadoRelacionSuministro.Finalizada, FechaFin = DateTime.UtcNow },
+            new PersonaSuministro { PersonaId = 3, SuministroId = 11, Estado = EstadoRelacionSuministro.Vigente });
+        await db.SaveChangesAsync();
     }
 
     [Fact]

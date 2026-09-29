@@ -98,35 +98,40 @@ public sealed class SuministroService : ISuministroService
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public Task<SuministroQrPublicDto?> GetPublicByQrTokenAsync(
+    public async Task<SuministroQrPublicDto?> GetPublicByQrTokenAsync(
         string token,
         CancellationToken cancellationToken = default)
     {
         var normalizedToken = NormalizeQrToken(token);
         if (normalizedToken is null)
         {
-            return Task.FromResult<SuministroQrPublicDto?>(null);
+            return null;
         }
 
-        return (
+        var resolvedSupply = await (
             from supply in _dbContext.Suministros.AsNoTracking()
             join sector in _dbContext.Sectores.AsNoTracking()
                 on supply.SectorId equals sector.Id
             where supply.CodigoQrToken == normalizedToken
-            select new SuministroQrPublicDto(
-                supply.Nis,
-                sector.Nombre,
-                supply.Estado,
-                _dbContext.Obligaciones.Count(o =>
-                    o.SuministroId == supply.Id &&
-                    o.PersonaId == null &&
-                    o.Estado == EstadoObligacion.Pendiente),
-                _dbContext.Obligaciones.Where(o =>
-                    o.SuministroId == supply.Id &&
-                    o.PersonaId == null &&
-                    o.Estado == EstadoObligacion.Pendiente)
-                    .Sum(o => (decimal?)o.Monto) ?? 0m))
+            select new { supply.Id, supply.Nis, SectorNombre = sector.Nombre, supply.Estado })
             .SingleOrDefaultAsync(cancellationToken);
+        if (resolvedSupply is null) return null;
+
+        var responsibleId = await _dbContext.PersonaSuministros.AsNoTracking()
+            .Where(ps => ps.SuministroId == resolvedSupply.Id && ps.Estado == EstadoRelacionSuministro.Vigente)
+            .Select(ps => (int?)ps.PersonaId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var pending = await _dbContext.Obligaciones.AsNoTracking()
+            .Where(o => o.Estado == EstadoObligacion.Pendiente &&
+                ((o.SuministroId == resolvedSupply.Id && o.PersonaId == null) ||
+                 (responsibleId != null && o.PersonaId == responsibleId && o.SuministroId == null)))
+            .GroupBy(o => 1)
+            .Select(group => new { Count = group.Count(), Total = group.Sum(o => o.Monto) })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return new SuministroQrPublicDto(resolvedSupply.Nis, resolvedSupply.SectorNombre, resolvedSupply.Estado,
+            pending?.Count ?? 0, pending?.Total ?? 0m);
     }
 
     public async Task<IReadOnlyList<ResponsableHistorialDto>?> GetResponsablesAsync(
