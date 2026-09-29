@@ -29,7 +29,9 @@ public sealed class PersonaService : IPersonaService
                 p.Identificacion,
                 p.Telefono,
                 p.DireccionReferencia,
-                p.Estado))
+                p.Estado,
+                p.SectorId,
+                p.Sector != null ? p.Sector.Nombre : null))
             .ToListAsync(cancellationToken);
     }
 
@@ -45,7 +47,9 @@ public sealed class PersonaService : IPersonaService
                 p.Identificacion,
                 p.Telefono,
                 p.DireccionReferencia,
-                p.Estado))
+                p.Estado,
+                p.SectorId,
+                p.Sector != null ? p.Sector.Nombre : null))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -54,7 +58,7 @@ public sealed class PersonaService : IPersonaService
         CancellationToken cancellationToken = default)
     {
         var normalized = Normalize(input);
-        if (normalized is null)
+        if (normalized is null || !await SectorIsValidAsync(input.SectorId, cancellationToken))
         {
             return PersonaOperationResult<PersonaDto>.Failure(PersonaOperationError.Invalid);
         }
@@ -71,6 +75,7 @@ public sealed class PersonaService : IPersonaService
             Identificacion = normalized.Value.Identificacion,
             Telefono = normalized.Value.Telefono,
             DireccionReferencia = normalized.Value.DireccionReferencia,
+            SectorId = input.SectorId,
             Estado = EstadoRegistro.Activo
         };
 
@@ -85,7 +90,7 @@ public sealed class PersonaService : IPersonaService
             return PersonaOperationResult<PersonaDto>.Failure(PersonaOperationError.Duplicate);
         }
 
-        return PersonaOperationResult<PersonaDto>.Success(ToDto(persona));
+        return PersonaOperationResult<PersonaDto>.Success((await GetByIdAsync(persona.Id, cancellationToken))!);
     }
 
     public async Task<PersonaOperationResult<PersonaDto>> UpdateAsync(
@@ -94,7 +99,7 @@ public sealed class PersonaService : IPersonaService
         CancellationToken cancellationToken = default)
     {
         var normalized = Normalize(input);
-        if (normalized is null)
+        if (normalized is null || !await SectorIsValidAsync(input.SectorId, cancellationToken))
         {
             return PersonaOperationResult<PersonaDto>.Failure(PersonaOperationError.Invalid);
         }
@@ -111,6 +116,7 @@ public sealed class PersonaService : IPersonaService
             return PersonaOperationResult<PersonaDto>.Failure(PersonaOperationError.Duplicate);
         }
 
+        persona.SectorId = input.SectorId;
         persona.Nombres = normalized.Value.Nombres;
         persona.Apellidos = normalized.Value.Apellidos;
         persona.Identificacion = normalized.Value.Identificacion;
@@ -126,7 +132,7 @@ public sealed class PersonaService : IPersonaService
             return PersonaOperationResult<PersonaDto>.Failure(PersonaOperationError.Duplicate);
         }
 
-        return PersonaOperationResult<PersonaDto>.Success(ToDto(persona));
+        return PersonaOperationResult<PersonaDto>.Success((await GetByIdAsync(persona.Id, cancellationToken))!);
     }
 
     public async Task<PersonaOperationResult<PersonaDto>> SetEstadoAsync(
@@ -148,7 +154,7 @@ public sealed class PersonaService : IPersonaService
 
         persona.Estado = estado;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return PersonaOperationResult<PersonaDto>.Success(ToDto(persona));
+        return PersonaOperationResult<PersonaDto>.Success((await GetByIdAsync(persona.Id, cancellationToken))!);
     }
 
     private async Task<bool> IdentificationExistsAsync(
@@ -190,8 +196,9 @@ public sealed class PersonaService : IPersonaService
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static PersonaDto ToDto(Persona persona) =>
-        new(persona.Id, persona.Nombres, persona.Apellidos, persona.Identificacion, persona.Telefono, persona.DireccionReferencia, persona.Estado);
+    private async Task<bool> SectorIsValidAsync(int? sectorId, CancellationToken cancellationToken) =>
+        sectorId is null || await _dbContext.Sectores.AsNoTracking()
+            .AnyAsync(s => s.Id == sectorId && s.Estado == EstadoRegistro.Activo, cancellationToken);
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception)
     {

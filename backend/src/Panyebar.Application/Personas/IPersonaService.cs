@@ -18,14 +18,17 @@ public sealed record PersonaDto(
     string? Identificacion,
     string? Telefono,
     string? DireccionReferencia,
-    EstadoRegistro Estado);
+    EstadoRegistro Estado,
+    int? SectorId = null,
+    string? SectorNombre = null);
 
 public sealed record PersonaInput(
     string? Nombres,
     string? Apellidos,
     string? Identificacion,
     string? Telefono,
-    string? DireccionReferencia);
+    string? DireccionReferencia,
+    int? SectorId = null);
 
 public enum PersonaOperationError
 {

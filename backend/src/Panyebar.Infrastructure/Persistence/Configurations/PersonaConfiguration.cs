@@ -29,6 +29,11 @@ namespace Panyebar.Infrastructure.Persistence.Configurations
             builder.Property(p => p.DireccionReferencia)
                 .HasMaxLength(500);
 
+            builder.HasOne(p => p.Sector)
+                .WithMany()
+                .HasForeignKey(p => p.SectorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             builder.HasIndex(p => p.Identificacion)
                 .IsUnique()
                 .HasFilter("[Identificacion] IS NOT NULL");

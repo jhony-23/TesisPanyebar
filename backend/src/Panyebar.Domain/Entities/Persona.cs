@@ -19,6 +19,9 @@ namespace Panyebar.Domain.Entities
         public string? Telefono { get; set; }
         public string? DireccionReferencia { get; set; }
 
+        public int? SectorId { get; set; }
+        public Sector? Sector { get; set; }
+
         // Estado de registro, valor inicial Activo
         public EstadoRegistro Estado { get; set; } = EstadoRegistro.Activo;
     }

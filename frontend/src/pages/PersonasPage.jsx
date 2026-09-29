@@ -12,12 +12,15 @@ import {
   updatePersona,
 } from '../services/personaService.js'
 
+import { getSectores } from '../services/sectorService.js'
+
 const initialForm = {
   nombres: '',
   apellidos: '',
   identificacion: '',
   telefono: '',
   direccionReferencia: '',
+  sectorId: '',
 }
 
 function PersonasPage() {
@@ -25,6 +28,8 @@ function PersonasPage() {
   const canManage = hasPermission(PERMISOS.PERSONAS_GESTIONAR)
   const requestRef = useRef(authenticatedRequest)
   const [personas, setPersonas] = useState([])
+  const [sectores, setSectores] = useState([])
+  const [sectorError, setSectorError] = useState(null)
   const [search, setSearch] = useState('')
   const [showAll, setShowAll] = useState(false)
   const normalizedSearch = search.trim().toLowerCase()
@@ -60,6 +65,15 @@ function PersonasPage() {
     return () => { mounted = false }
   }, [])
 
+  useEffect(() => {
+    if (!canManage) return
+    let mounted = true
+    getSectores(requestRef.current)
+      .then((data) => { if (mounted) setSectores(Array.isArray(data) ? data : []) })
+      .catch(() => { if (mounted) setSectorError('No se pudieron cargar los sectores disponibles.') })
+    return () => { mounted = false }
+  }, [canManage])
+
   function resetForm() {
     setForm(initialForm)
     setEditingId(null)
@@ -74,6 +88,7 @@ function PersonasPage() {
       identificacion: persona.identificacion || '',
       telefono: persona.telefono || '',
       direccionReferencia: persona.direccionReferencia || '',
+      sectorId: persona.sectorId == null ? '' : String(persona.sectorId),
     })
     setFormError(null)
     window.scrollTo({ behavior: 'smooth', top: 0 })
@@ -109,15 +124,20 @@ function PersonasPage() {
       identificacion: form.identificacion.trim() || null,
       telefono: form.telefono.trim() || null,
       direccionReferencia: form.direccionReferencia.trim() || null,
+      sectorId: form.sectorId === '' ? null : Number(form.sectorId),
     }
 
     try {
       const saved = editingId === null
         ? await createPersona(authenticatedRequest, payload)
         : await updatePersona(authenticatedRequest, editingId, payload)
-      setPersonas((current) => editingId === null
-        ? [...current, saved].sort(comparePersonas)
-        : current.map((persona) => persona.id === editingId ? saved : persona).sort(comparePersonas))
+      if (editingId === null) {
+        setPersonas((current) => [saved, ...current])
+        setSearch('')
+        setShowAll(false)
+      } else {
+        setPersonas((current) => current.map((persona) => persona.id === editingId ? saved : persona).sort(comparePersonas))
+      }
       resetForm()
     } catch (requestError) {
       setFormError(getRequestMessage(requestError, 'No se pudo guardar la persona.'))
@@ -183,6 +203,15 @@ function PersonasPage() {
           <form className="mt-5 space-y-4" onSubmit={savePersona}>
             <FormField label="Nombres" maxLength="150" name="nombres" onChange={changeField} required value={form.nombres} />
             <FormField label="Apellidos" maxLength="150" name="apellidos" onChange={changeField} required value={form.apellidos} />
+            <div>
+              <label className="text-sm font-medium text-slate-700" htmlFor="persona-sector">Sector <span className="font-normal text-slate-400">(opcional)</span></label>
+              <select className="mt-1.5 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" id="persona-sector" name="sectorId" onChange={changeField} value={form.sectorId}>
+                <option value="">Sin sector asignado</option>
+                {form.sectorId && !sectores.some((sector) => String(sector.id) === form.sectorId) && <option disabled value={form.sectorId}>{personas.find((persona) => persona.id === editingId)?.sectorNombre || 'Sector actual'}</option>}
+                {sectores.filter((sector) => sector.estado === 1 || String(sector.id) === form.sectorId).map((sector) => <option disabled={sector.estado !== 1} key={sector.id} value={sector.id}>{sector.nombre}{sector.estado !== 1 ? ' (Inactivo)' : ''}</option>)}
+              </select>
+              {sectorError && <p className="mt-1 text-sm text-red-800" role="alert">{sectorError}</p>}
+            </div>
             <FormField hint="(opcional)" label="Identificación" maxLength="50" name="identificacion" onChange={changeField} value={form.identificacion} />
             <FormField hint="(opcional)" label="Teléfono" maxLength="30" name="telefono" onChange={changeField} value={form.telefono} />
             <div>
@@ -263,7 +292,7 @@ function PersonaList({ canManage, isSaving, onEdit, onStatus, personas }) {
 function PersonaRow({ canManage, isSaving, onEdit, onStatus, persona }) {
   return (
     <tr>
-      <td className="max-w-56 py-4 pr-4 font-semibold text-slate-900">{persona.nombres} {persona.apellidos}</td>
+      <td className="max-w-56 py-4 pr-4 font-semibold text-slate-900">{persona.nombres} {persona.apellidos}<p className="mt-1 text-xs font-normal text-slate-500">Sector: {persona.sectorNombre || 'Sin asignar'}</p></td>
       <td className="py-4 pr-4 text-slate-600">{persona.identificacion || <span className="text-slate-400">Sin identificación</span>}</td>
       <td className="py-4 pr-4 text-slate-600">{persona.telefono || <span className="text-slate-400">Sin teléfono</span>}</td>
       <td className="py-4 pr-4"><StatusBadge estado={persona.estado} /></td>
@@ -275,7 +304,7 @@ function PersonaRow({ canManage, isSaving, onEdit, onStatus, persona }) {
 function PersonaCard({ canManage, isSaving, onEdit, onStatus, persona }) {
   return (
     <article className="rounded-md border border-slate-200 p-4">
-      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{persona.nombres} {persona.apellidos}</h3><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Identificación: </dt><dd className="inline">{persona.identificacion || 'Sin identificación'}</dd></div><div><dt className="inline font-medium text-slate-500">Teléfono: </dt><dd className="inline">{persona.telefono || 'Sin teléfono'}</dd></div></dl></div><StatusBadge estado={persona.estado} /></div>
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{persona.nombres} {persona.apellidos}</h3><p className="mt-1 text-xs text-slate-500">Sector: {persona.sectorNombre || 'Sin asignar'}</p><dl className="mt-2 space-y-1 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Identificación: </dt><dd className="inline">{persona.identificacion || 'Sin identificación'}</dd></div><div><dt className="inline font-medium text-slate-500">Teléfono: </dt><dd className="inline">{persona.telefono || 'Sin teléfono'}</dd></div></dl></div><StatusBadge estado={persona.estado} /></div>
       {canManage && <div className="mt-4 border-t border-slate-100 pt-3"><PersonaActions isSaving={isSaving} onEdit={onEdit} onStatus={onStatus} persona={persona} /></div>}
     </article>
   )
