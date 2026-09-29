@@ -22,6 +22,7 @@ public sealed class FinanceControllersSecurityTests
     [InlineData(typeof(ObligacionesController), nameof(ObligacionesController.GetById), "Permission:OBLIGACIONES.VER")]
     [InlineData(typeof(ObligacionesController), nameof(ObligacionesController.GenerateFromCuota), "Permission:OBLIGACIONES.GESTIONAR")]
     [InlineData(typeof(ObligacionesController), nameof(ObligacionesController.Annul), "Permission:OBLIGACIONES.GESTIONAR")]
+    [InlineData(typeof(ObligacionesController), nameof(ObligacionesController.GeneratePersonal), "Permission:OBLIGACIONES.GESTIONAR")]
     public void Endpoints_RequireExpectedDynamicPermission(Type controllerType, string action, string policy)
     {
         var method = controllerType.GetMethod(action, BindingFlags.Instance | BindingFlags.Public);
@@ -79,6 +80,33 @@ public sealed class FinanceControllersSecurityTests
         Assert.Null(service.CapturedUserId);
     }
 
+    [Theory]
+    [InlineData(ObligacionOperationError.None, 201)]
+    [InlineData(ObligacionOperationError.Invalid, 400)]
+    [InlineData(ObligacionOperationError.NotFound, 404)]
+    [InlineData(ObligacionOperationError.Conflict, 409)]
+    public async Task GeneratePersonal_MapsResultsAndUsesAuthenticatedAuthor(ObligacionOperationError error, int status)
+    {
+        var service = new CapturingObligacionService { PersonalError = error };
+        var controller = new ObligacionesController(service) { ControllerContext = AuthenticatedContext("42") };
+        var result = await controller.GeneratePersonal(new(new[] { 1 }, "Aporte", 10, null, null), CancellationToken.None);
+        Assert.Equal(status, Assert.IsAssignableFrom<ObjectResult>(result).StatusCode);
+        Assert.Equal(42, service.CapturedUserId);
+    }
+
+    [Fact]
+    public async Task GeneratePersonal_RejectsMissingIdentity()
+    {
+        var service = new CapturingObligacionService();
+        var controller = new ObligacionesController(service)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        Assert.IsType<UnauthorizedObjectResult>(await controller.GeneratePersonal(
+            new(new[] { 1 }, "Aporte", 10, null, null), CancellationToken.None));
+        Assert.Null(service.CapturedUserId);
+    }
+
     private static ControllerContext AuthenticatedContext(string userId)
     {
         var identity = new ClaimsIdentity(
@@ -92,6 +120,15 @@ public sealed class FinanceControllersSecurityTests
 
     private sealed class CapturingObligacionService : IObligacionService
     {
+        public ObligacionOperationError PersonalError { get; set; }
+        public Task<ObligacionOperationResult<IReadOnlyList<ObligacionDto>>> GeneratePersonalAsync(
+            GenerarObligacionesPersonalesInput input, int usuarioAdministrativoId, CancellationToken cancellationToken = default)
+        {
+            CapturedUserId = usuarioAdministrativoId;
+            return Task.FromResult(PersonalError == ObligacionOperationError.None
+                ? ObligacionOperationResult<IReadOnlyList<ObligacionDto>>.Success(new[] { Result() })
+                : ObligacionOperationResult<IReadOnlyList<ObligacionDto>>.Failure(PersonalError));
+        }
         public int? CapturedUserId { get; private set; }
 
         public Task<IReadOnlyList<ObligacionDto>> GetAllAsync(CancellationToken cancellationToken = default) =>

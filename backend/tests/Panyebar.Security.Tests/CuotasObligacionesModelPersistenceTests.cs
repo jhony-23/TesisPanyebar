@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Panyebar.Application.Security;
 using Panyebar.Domain.Entities;
 using Panyebar.Domain.Enums;
@@ -11,6 +12,18 @@ namespace Panyebar.Security.Tests;
 
 public class CuotasObligacionesModelPersistenceTests
 {
+    [Fact]
+    public void AdministrativeOrigin_UsesIntegerStorageWithoutRestrictiveOriginCheck()
+    {
+        using var context = CreateSqlServerModelContext();
+        var entity = context.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(Obligacion))!;
+        Assert.Equal("int", entity.FindProperty(nameof(Obligacion.Origen))!.GetColumnType());
+        Assert.DoesNotContain(entity.GetCheckConstraints(), c => c.Sql.Contains("Origen", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(entity.GetCheckConstraints(), c => c.Name == "CK_Obligaciones_TitularXor");
+        var sql = context.Obligaciones.Where(o => o.Origen == OrigenObligacion.Administrativa).ToQueryString();
+        Assert.Contains("[Origen] = 3", sql);
+    }
+
     private static PanyebarDbContext CreateSqlServerModelContext()
     {
         var options = new DbContextOptionsBuilder<PanyebarDbContext>()
@@ -45,6 +58,7 @@ public class CuotasObligacionesModelPersistenceTests
     {
         Assert.Equal(1, (int)OrigenObligacion.CuotaOrdinaria);
         Assert.Equal(2, (int)OrigenObligacion.Jornada);
+        Assert.Equal(3, (int)OrigenObligacion.Administrativa);
     }
 
     [Fact]

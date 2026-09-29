@@ -4,6 +4,10 @@ namespace Panyebar.Application.Obligaciones;
 
 public interface IObligacionService
 {
+    Task<ObligacionOperationResult<IReadOnlyList<ObligacionDto>>> GeneratePersonalAsync(
+        GenerarObligacionesPersonalesInput input,
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ObligacionDto>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<ObligacionDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<ObligacionOperationResult<ObligacionDto>> GenerateFromCuotaAsync(
@@ -38,6 +42,13 @@ public sealed record GenerarObligacionCuotaInput(
     DateTime? FechaVencimiento);
 
 public sealed record AnularObligacionInput(string? Motivo);
+
+public sealed record GenerarObligacionesPersonalesInput(
+    IReadOnlyCollection<int>? PersonaIds,
+    string? Concepto,
+    decimal Monto,
+    string? Periodo,
+    DateTime? FechaVencimiento);
 
 public enum ObligacionOperationError
 {

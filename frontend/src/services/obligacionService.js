@@ -1,5 +1,12 @@
 const obligacionPath = '/obligaciones'
 
+export function generateObligacionesPersonales(authenticatedRequest, input) {
+  return authenticatedRequest(`${obligacionPath}/personales`, {
+    body: input,
+    method: 'POST',
+  })
+}
+
 export function getObligaciones(authenticatedRequest) {
   return authenticatedRequest(obligacionPath)
 }

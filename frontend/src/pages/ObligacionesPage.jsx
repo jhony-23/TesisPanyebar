@@ -7,11 +7,14 @@ import LoadingState from '../components/ui/LoadingState.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Panel from '../components/ui/Panel.jsx'
 import { getCuotas } from '../services/cuotaService.js'
-import { annulObligacion, generateObligacionFromCuota, getObligaciones } from '../services/obligacionService.js'
+import { annulObligacion, generateObligacionFromCuota, generateObligacionesPersonales, getObligaciones } from '../services/obligacionService.js'
+import { getPersonas } from '../services/personaService.js'
 import { getSuministros } from '../services/suministroService.js'
 import { formatCivilDate, formatGuatemalaDateTime } from '../utils/dateTime.js'
 
 const initialForm = { cuotaId: '', suministroId: '', periodo: '', fechaVencimiento: '' }
+
+const initialPersonalForm = { concepto: '', monto: '', periodo: '', fechaVencimiento: '' }
 
 function ObligacionesPage() {
   const { authenticatedRequest, hasPermission } = useAuth()
@@ -39,6 +42,64 @@ function ObligacionesPage() {
   const [referenceError, setReferenceError] = useState(null)
   const [formError, setFormError] = useState(null)
   const [feedback, setFeedback] = useState(null)
+  const [personas, setPersonas] = useState([])
+  const [peopleLoading, setPeopleLoading] = useState(true)
+  const [peopleError, setPeopleError] = useState(null)
+  const [personalForm, setPersonalForm] = useState(initialPersonalForm)
+  const [personalError, setPersonalError] = useState(null)
+  const [peopleSearch, setPeopleSearch] = useState('')
+  const [selectedIds, setSelectedIds] = useState([])
+  const peopleResults = personas.filter((person) =>
+    `${person.nombres} ${person.apellidos}`.toLowerCase().includes(peopleSearch.trim().toLowerCase()))
+
+  useEffect(() => {
+    if (!canManage) return
+    let mounted = true
+    getPersonas(requestRef.current)
+      .then((data) => { if (mounted) setPersonas(data.filter((person) => person.estado === 1)) })
+      .catch(() => { if (mounted) setPeopleError('No se pudieron cargar las personas. Recarga la página para volver a intentar.') })
+      .finally(() => { if (mounted) setPeopleLoading(false) })
+    return () => { mounted = false }
+  }, [canManage])
+
+  async function generatePersonal(event) {
+    event.preventDefault()
+    const amount = Number(personalForm.monto)
+    if (!selectedIds.length || !personalForm.concepto.trim() || personalForm.concepto.trim().length > 200 ||
+      !Number.isFinite(amount) || amount <= 0 || personalForm.periodo.trim().length > 20) {
+      setPersonalError('Indica un concepto válido, un monto positivo y al menos una persona.')
+      return
+    }
+    setIsSaving(true)
+    setPersonalError(null)
+    setFeedback(null)
+    try {
+      const created = await generateObligacionesPersonales(authenticatedRequest, {
+        personaIds: selectedIds,
+        concepto: personalForm.concepto.trim(),
+        monto: amount,
+        periodo: personalForm.periodo.trim() || null,
+        fechaVencimiento: personalForm.fechaVencimiento || null,
+      })
+      setPersonalForm(initialPersonalForm)
+      setSelectedIds([])
+      setPeopleSearch('')
+      setFeedback(`Se generaron ${created.length} obligaciones correctamente.`)
+      setObligaciones((current) => [...created, ...current].sort((a, b) =>
+        Date.parse(b.fechaGeneracion) - Date.parse(a.fechaGeneracion) || b.id - a.id))
+      try {
+        setObligaciones(await getObligaciones(authenticatedRequest))
+        setError(null)
+      } catch {
+        setError('Las obligaciones fueron creadas, pero no se pudo refrescar el listado completo. Recarga la página.')
+      }
+    } catch (requestError) {
+      setPersonalError(getRequestMessage(requestError, 'No se pudieron generar las obligaciones personales.'))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
 
   useEffect(() => {
     let mounted = true
@@ -158,7 +219,7 @@ function ObligacionesPage() {
     <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
         action={canManage ? <button className="rounded-md bg-[#123b43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#0d2d33] focus:outline-none focus:ring-2 focus:ring-[#28727a] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60" disabled={generationUnavailable} onClick={openGenerate} type="button">Generar obligación</button> : null}
-        description="Consulta las deudas históricas de los suministros y administra las obligaciones generadas desde cuotas."
+        description="Consulta y administra las obligaciones de suministros y personas."
         eyebrow="Gestión financiera"
         title="Obligaciones"
       />
@@ -182,11 +243,43 @@ function ObligacionesPage() {
         </Panel>
       )}
 
+      {canManage && <Panel>
+        <h2 className="text-base font-semibold text-slate-900">Generar obligación personal</h2>
+        <p className="mt-1 text-sm text-slate-500">Se creará una obligación independiente por cada persona seleccionada.</p>
+        <form className="mt-5" onSubmit={generatePersonal}>
+          <fieldset className="grid min-w-0 gap-4 md:grid-cols-2" disabled={isSaving}>
+            <label className="text-sm font-medium text-slate-700">Concepto *<input className={inputClass} maxLength={200} onChange={(e) => setPersonalForm((current) => ({ ...current, concepto: e.target.value }))} required value={personalForm.concepto} /></label>
+            <label className="text-sm font-medium text-slate-700">Monto por persona *<input className={inputClass} min="0.01" onChange={(e) => setPersonalForm((current) => ({ ...current, monto: e.target.value }))} required step="0.01" type="number" value={personalForm.monto} /></label>
+            <label className="text-sm font-medium text-slate-700">Periodo (opcional)<input className={inputClass} maxLength={20} onChange={(e) => setPersonalForm((current) => ({ ...current, periodo: e.target.value }))} value={personalForm.periodo} /></label>
+            <label className="text-sm font-medium text-slate-700">Fecha de vencimiento (opcional)<input className={inputClass} onChange={(e) => setPersonalForm((current) => ({ ...current, fechaVencimiento: e.target.value }))} type="date" value={personalForm.fechaVencimiento} /></label>
+            <div className="min-w-0 md:col-span-2">
+              <label className="text-sm font-medium text-slate-700" htmlFor="personal-people-search">Personas activas</label>
+              <input className={inputClass} id="personal-people-search" onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Buscar persona..." type="search" value={peopleSearch} />
+              <div className="my-3 flex flex-wrap gap-2">
+                <button className={selectionButtonClass} disabled={peopleLoading || !!peopleError} onClick={() => setSelectedIds(personas.map((p) => p.id))} type="button">Seleccionar todas</button>
+                {peopleSearch.trim() && <button className={selectionButtonClass} onClick={() => setSelectedIds((current) => [...new Set([...current, ...peopleResults.map((p) => p.id)])])} type="button">Seleccionar resultados</button>}
+                {selectedIds.length > 0 && <button className={selectionButtonClass} onClick={() => setSelectedIds([])} type="button">Limpiar selección</button>}
+              </div>
+              {peopleError ? <Alert message={peopleError} /> : peopleLoading ? <LoadingState message="Cargando personas..." /> : <div aria-label="Personas activas disponibles" className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+                {peopleResults.length === 0 && <p className="p-2 text-sm text-slate-500">No hay personas activas que coincidan.</p>}
+                {peopleResults.map((person) => <label className="flex min-h-11 items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50" key={person.id}>
+                  <input checked={selectedIds.includes(person.id)} className="h-4 w-4 shrink-0 accent-[#123b43]" onChange={(e) => setSelectedIds((current) => e.target.checked ? [...current, person.id] : current.filter((id) => id !== person.id))} type="checkbox" />
+                  <span className="break-words">{person.nombres} {person.apellidos}</span>
+                </label>)}
+              </div>}
+              <p aria-live="polite" className="mt-2 text-sm text-slate-600">{selectedIds.length} personas seleccionadas</p>
+            </div>
+            {personalError && <div className="md:col-span-2"><Alert message={personalError} /></div>}
+            <div className="flex justify-end md:col-span-2"><button className="rounded-md bg-[#d6a85f] px-4 py-2 text-sm font-semibold text-[#123b43] disabled:opacity-60" disabled={peopleLoading || !!peopleError || selectedIds.length === 0} type="submit">{isSaving ? 'Generando...' : 'Generar obligación personal'}</button></div>
+          </fieldset>
+        </form>
+      </Panel>}
+
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-base font-semibold text-slate-900">Obligaciones registradas</h2><p className="mt-1 text-sm text-slate-500">{obligaciones.length} {obligaciones.length === 1 ? 'obligación' : 'obligaciones'}</p></div><div className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">La morosidad mostrada proviene del servidor.</div></div>
         <input aria-label="Buscar obligación" className="mt-4 block min-h-11 w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20" onChange={(event) => { setSearch(event.target.value) }} placeholder="Buscar obligación..." type="search" value={search} />
         <div className="mt-5">
-          {isLoading ? <LoadingState message="Cargando obligaciones..." /> : obligaciones.length === 0 ? <EmptyState description="Las obligaciones generadas desde cuotas aparecerán aquí." title="No hay obligaciones registradas" /> : filteredItems.length === 0 ? <EmptyState description="Prueba con otro texto de búsqueda." title="No hay coincidencias" /> : <ObligationList cuotaById={cuotaById} isSaving={isSaving} obligaciones={filteredItems} onAnnul={setPendingAnnulment} supplyById={supplyById} />}
+          {isLoading ? <LoadingState message="Cargando obligaciones..." /> : obligaciones.length === 0 ? <EmptyState description="Las obligaciones generadas aparecerán aquí." title="No hay obligaciones registradas" /> : filteredItems.length === 0 ? <EmptyState description="Prueba con otro texto de búsqueda." title="No hay coincidencias" /> : <ObligationList cuotaById={cuotaById} isSaving={isSaving} obligaciones={filteredItems} onAnnul={setPendingAnnulment} supplyById={supplyById} />}
         </div>
       </Panel>
 
@@ -194,6 +287,8 @@ function ObligacionesPage() {
     </div>
   )
 }
+
+const selectionButtonClass = 'rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 focus:ring-2 focus:ring-[#28727a] disabled:opacity-60'
 
 const inputClass = 'mt-1.5 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-[#28727a] focus:ring-2 focus:ring-[#28727a]/20 disabled:cursor-not-allowed disabled:bg-slate-100'
 
@@ -205,11 +300,11 @@ function ObligationList({ cuotaById, isSaving, obligaciones, onAnnul, supplyById
 }
 
 function ObligationRow({ cuota, isSaving, obligation, onAnnul, supply }) {
-  return <tr><td className="max-w-52 py-4 pr-4"><p className="font-semibold text-slate-900">{obligation.concepto}</p><p className="mt-1 text-xs text-slate-500">{cuota ? `Cuota: ${cuota.nombre}` : `Cuota #${obligation.cuotaId ?? '—'}`}</p></td><td className="py-4 pr-4 text-slate-600">{holderLabel(obligation, supply)}</td><td className="py-4 pr-4 font-medium text-slate-700">{obligation.periodo || '—'}</td><td className="whitespace-nowrap py-4 pr-4 font-semibold text-slate-700">{formatMoney(obligation.monto)}</td><td className="py-4 pr-4 text-xs leading-5 text-slate-600"><span className="block">Generada: {formatGuatemalaDateTime(obligation.fechaGeneracion)}</span><span className="block">Vence: {formatCivilDate(obligation.fechaVencimiento, 'Sin vencimiento')}</span></td><td className="py-4 pr-4"><Situation obligation={obligation} /></td><td className="py-4 text-right"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></td></tr>
+  return <tr><td className="max-w-52 py-4 pr-4"><p className="font-semibold text-slate-900">{obligation.concepto}</p><p className="mt-1 text-xs text-slate-500">{obligation.origen === 3 ? 'Administrativa' : cuota ? `Cuota: ${cuota.nombre}` : `Cuota #${obligation.cuotaId ?? '—'}`}</p></td><td className="py-4 pr-4 text-slate-600">{holderLabel(obligation, supply)}</td><td className="py-4 pr-4 font-medium text-slate-700">{obligation.periodo || '—'}</td><td className="whitespace-nowrap py-4 pr-4 font-semibold text-slate-700">{formatMoney(obligation.monto)}</td><td className="py-4 pr-4 text-xs leading-5 text-slate-600"><span className="block">Generada: {formatGuatemalaDateTime(obligation.fechaGeneracion)}</span><span className="block">Vence: {formatCivilDate(obligation.fechaVencimiento, 'Sin vencimiento')}</span></td><td className="py-4 pr-4"><Situation obligation={obligation} /></td><td className="py-4 text-right"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></td></tr>
 }
 
 function ObligationCard({ cuota, isSaving, obligation, onAnnul, supply }) {
-  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{obligation.concepto}</h3><p className="mt-1 text-sm text-slate-500">{holderLabel(obligation, supply)}</p></div><Situation obligation={obligation} /></div><dl className="mt-4 grid grid-cols-2 gap-3 rounded-md bg-slate-50 p-3 text-sm"><Data label="Monto" value={formatMoney(obligation.monto)} strong /><Data label="Período" value={obligation.periodo || '—'} /><Data label="Cuota" value={cuota?.nombre || `#${obligation.cuotaId ?? '—'}`} /><Data label="Generación" value={formatGuatemalaDateTime(obligation.fechaGeneracion)} /><Data label="Vencimiento" value={formatCivilDate(obligation.fechaVencimiento, 'Sin vencimiento')} /></dl><div className="mt-4 border-t border-slate-100 pt-3"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></div></article>
+  return <article className="rounded-md border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-slate-900">{obligation.concepto}</h3><p className="mt-1 text-sm text-slate-500">{holderLabel(obligation, supply)}</p></div><Situation obligation={obligation} /></div><dl className="mt-4 grid grid-cols-2 gap-3 rounded-md bg-slate-50 p-3 text-sm"><Data label="Monto" value={formatMoney(obligation.monto)} strong /><Data label="Período" value={obligation.periodo || '—'} /><Data label={obligation.origen === 3 ? 'Origen' : 'Cuota'} value={obligation.origen === 3 ? 'Administrativa' : cuota?.nombre || `#${obligation.cuotaId ?? '—'}`} /><Data label="Generación" value={formatGuatemalaDateTime(obligation.fechaGeneracion)} /><Data label="Vencimiento" value={formatCivilDate(obligation.fechaVencimiento, 'Sin vencimiento')} /></dl><div className="mt-4 border-t border-slate-100 pt-3"><ObligationActions isSaving={isSaving} obligation={obligation} onAnnul={onAnnul} /></div></article>
 }
 
 function Data({ label, strong = false, value }) {
@@ -252,7 +347,7 @@ function AnnulmentDialog({ isSaving, obligation, onCancel, onConfirm, supply }) 
     onConfirm(motivo.trim())
   }
 
-  return <div aria-labelledby="annulment-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4" role="dialog"><div className="my-4 max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl"><h2 className="text-lg font-semibold text-slate-900" id="annulment-title">Anular obligación</h2><p className="mt-2 text-sm leading-6 text-slate-600">Esta acción cambiará la obligación pendiente a Anulada. No eliminará su registro histórico.</p><dl className="mt-4 space-y-1 rounded-md bg-slate-50 p-4 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Concepto: </dt><dd className="inline">{obligation.concepto}</dd></div><div><dt className="inline font-medium text-slate-500">Suministro: </dt><dd className="inline">{supply?.nis || `#${obligation.suministroId}`}</dd></div><div><dt className="inline font-medium text-slate-500">Monto: </dt><dd className="inline">{formatMoney(obligation.monto)}</dd></div></dl><form className="mt-5 space-y-4" onSubmit={submit}><ReasonField autoFocus disabled={isSaving} label="Motivo" onChange={setMotivo} options={['Obligación generada incorrectamente', 'Obligación duplicada', 'La obligación no corresponde', 'Corrección administrativa']} required value={motivo} />{dialogError && <Alert message={dialogError} />}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100" disabled={isSaving} onClick={onCancel} type="button">Volver</button><button className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? 'Anulando...' : 'Confirmar anulación'}</button></div></form></div></div>
+  return <div aria-labelledby="annulment-title" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4" role="dialog"><div className="my-4 max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl"><h2 className="text-lg font-semibold text-slate-900" id="annulment-title">Anular obligación</h2><p className="mt-2 text-sm leading-6 text-slate-600">Esta acción cambiará la obligación pendiente a Anulada. No eliminará su registro histórico.</p><dl className="mt-4 space-y-1 rounded-md bg-slate-50 p-4 text-sm text-slate-600"><div><dt className="inline font-medium text-slate-500">Concepto: </dt><dd className="inline">{obligation.concepto}</dd></div><div><dt className="inline font-medium text-slate-500">Titular: </dt><dd className="inline">{holderLabel(obligation, supply)}</dd></div><div><dt className="inline font-medium text-slate-500">Monto: </dt><dd className="inline">{formatMoney(obligation.monto)}</dd></div></dl><form className="mt-5 space-y-4" onSubmit={submit}><ReasonField autoFocus disabled={isSaving} label="Motivo" onChange={setMotivo} options={['Obligación generada incorrectamente', 'Obligación duplicada', 'La obligación no corresponde', 'Corrección administrativa']} required value={motivo} />{dialogError && <Alert message={dialogError} />}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100" disabled={isSaving} onClick={onCancel} type="button">Volver</button><button className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? 'Anulando...' : 'Confirmar anulación'}</button></div></form></div></div>
 }
 
 function Alert({ message, onDismiss }) {

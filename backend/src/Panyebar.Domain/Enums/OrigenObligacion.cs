@@ -6,6 +6,7 @@ namespace Panyebar.Domain.Enums
     public enum OrigenObligacion
     {
         CuotaOrdinaria = 1,
-        Jornada = 2
+        Jornada = 2,
+        Administrativa = 3
     }
 }

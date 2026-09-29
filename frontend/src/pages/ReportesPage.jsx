@@ -420,7 +420,7 @@ function workDayStatusName(status) {
 function originName(origin) {
   if (origin === 1) return 'Cuota ordinaria'
   if (origin === 2) return 'Jornada'
-  if (origin === 3) return 'Reconexión'
+  if (origin === 3) return 'Administrativa'
   if (origin === 4) return 'Otro'
   return 'Desconocido'
 }

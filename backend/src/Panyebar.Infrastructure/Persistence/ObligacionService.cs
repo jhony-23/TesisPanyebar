@@ -127,6 +127,72 @@ public sealed class ObligacionService : IObligacionService
         return ObligacionOperationResult<ObligacionDto>.Success(ToDto(obligation, DateTime.UtcNow));
     }
 
+    public async Task<ObligacionOperationResult<IReadOnlyList<ObligacionDto>>> GeneratePersonalAsync(
+        GenerarObligacionesPersonalesInput input,
+        int usuarioAdministrativoId,
+        CancellationToken cancellationToken = default)
+    {
+        var concept = input?.Concepto?.Trim();
+        var period = string.IsNullOrWhiteSpace(input?.Periodo) ? null : input.Periodo.Trim();
+        var ids = input?.PersonaIds?.ToArray();
+        if (input is null || ids is null || ids.Length == 0 || ids.Any(id => id <= 0) ||
+            ids.Distinct().Count() != ids.Length || string.IsNullOrEmpty(concept) || concept.Length > 200 ||
+            input.Monto <= 0 || input.Monto > 9999999999999999.99m || decimal.Round(input.Monto, 2) != input.Monto ||
+            period?.Length > 20 || !await UserExistsAsync(usuarioAdministrativoId, cancellationToken))
+        {
+            return ObligacionOperationResult<IReadOnlyList<ObligacionDto>>.Failure(ObligacionOperationError.Invalid);
+        }
+
+        var people = await _dbContext.Personas.AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .Select(p => new { p.Id, p.Estado }).ToListAsync(cancellationToken);
+        if (people.Count != ids.Length)
+        {
+            return ObligacionOperationResult<IReadOnlyList<ObligacionDto>>.Failure(ObligacionOperationError.NotFound);
+        }
+        if (people.Any(p => p.Estado != EstadoRegistro.Activo))
+        {
+            return ObligacionOperationResult<IReadOnlyList<ObligacionDto>>.Failure(ObligacionOperationError.Invalid);
+        }
+
+        var now = DateTime.UtcNow;
+        var obligations = ids.Select(id => new Obligacion
+        {
+            PersonaId = id,
+            SuministroId = null,
+            CuotaId = null,
+            Origen = OrigenObligacion.Administrativa,
+            Concepto = concept,
+            Monto = input.Monto,
+            Periodo = period,
+            FechaGeneracion = now,
+            FechaVencimiento = input.FechaVencimiento,
+            Estado = EstadoObligacion.Pendiente
+        }).ToArray();
+
+        await using var transaction = await BeginTransactionIfRelationalAsync(cancellationToken);
+        _dbContext.Obligaciones.AddRange(obligations);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        // La auditoría existente identifica una entidad concreta por EntidadId.
+        _dbContext.Auditorias.AddRange(obligations.Select(obligation => new Auditoria
+        {
+            UsuarioAdministrativoId = usuarioAdministrativoId,
+            Accion = "OBLIGACION.GENERAR.PERSONAL",
+            Entidad = "Obligacion",
+            EntidadId = obligation.Id,
+            Fecha = now,
+            ValorNuevo = $"PersonaId:{obligation.PersonaId}; Origen:Administrativa; " +
+                         $"Monto:{obligation.Monto:0.00}; Estado:Pendiente; CantidadOperacion:{obligations.Length}"
+        }));
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+        return ObligacionOperationResult<IReadOnlyList<ObligacionDto>>.Success(
+            obligations.Select(o => ToDto(o, now)).ToArray());
+    }
+
     public async Task<ObligacionOperationResult<ObligacionDto>> AnnulAsync(
         int id,
         AnularObligacionInput input,

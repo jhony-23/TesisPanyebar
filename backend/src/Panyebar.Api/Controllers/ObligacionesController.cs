@@ -55,6 +55,27 @@ public sealed class ObligacionesController : ControllerBase
         };
     }
 
+    [HttpPost("personales")]
+    [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.ObligacionesGestionar)]
+    public async Task<IActionResult> GeneratePersonal(
+        [FromBody] GenerarObligacionesPersonalesInput request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId))
+        {
+            return Unauthorized(new { message = "No se pudo identificar al usuario administrativo autenticado." });
+        }
+
+        var result = await _service.GeneratePersonalAsync(request, userId, cancellationToken);
+        return result.Error switch
+        {
+            ObligacionOperationError.Invalid => BadRequest(new { message = "Revisa los datos y selecciona personas activas sin repetirlas." }),
+            ObligacionOperationError.NotFound => NotFound(new { message = "Una o varias personas no existen." }),
+            ObligacionOperationError.Conflict => Conflict(new { message = "No se pudieron generar las obligaciones personales." }),
+            _ => StatusCode(StatusCodes.Status201Created, result.Value)
+        };
+    }
+
     [HttpPost("{id:int}/anulacion")]
     [Authorize(Policy = "Permission:" + AdministrativePermissionCodes.ObligacionesGestionar)]
     public async Task<IActionResult> Annul(
