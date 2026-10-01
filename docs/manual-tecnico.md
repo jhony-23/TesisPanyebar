@@ -1117,3 +1117,135 @@ deben restringirse al personal autorizado y no deben almacenarse públicamente.
 Las credenciales asociadas a su ejecución, supervisión o restauración deben
 mantenerse fuera del repositorio y suministrarse mediante mecanismos seguros de
 configuración del entorno.
+
+### 26. Alternativas de alojamiento para una futura implementación
+
+Esta sección tiene carácter informativo. La arquitectura del sistema no
+depende de un proveedor comercial específico. La futura infraestructura deberá
+seleccionarse de acuerdo con los requisitos descritos en las secciones 24 y 25.
+
+La información de esta sección no selecciona un proveedor, no constituye una
+cotización, no implica que se haya contratado infraestructura y no implica que
+el sistema esté en producción. Tampoco modifica el estado de RNF-10 ni RNF-11,
+que permanecen condicionados a la futura implementación y comprobación
+operativa.
+
+"Los precios, planes y características mencionados en esta sección corresponden a información pública consultada en octubre de 2026 y pueden cambiar. Antes de cualquier contratación deberán verificarse nuevamente en los sitios oficiales de los proveedores."
+
+#### Alternativa A: SmarterASP.NET
+
+SmarterASP.NET se documenta como una alternativa económica de hosting
+administrado para una futura implementación compatible con la arquitectura del
+sistema. La información pública consultada en octubre de 2026 muestra los
+siguientes planes y capacidades:
+
+- ASP.NET Basic: desde US$2.95/mes;
+- ASP.NET Advance: desde US$4.95/mes;
+- ASP.NET Premium: desde US$7.95/mes;
+- soporte publicado para .NET 8.x;
+- soporte para SQL Server;
+- SSL disponible;
+- backup y restore de MSSQL disponibles;
+- conexión remota a SQL Server disponible.
+
+También se publica una prueba gratuita de 60 días sin tarjeta. Esta prueba se
+considera únicamente una modalidad de evaluación y no constituye una solución
+productiva permanente.
+
+#### Backups de SmarterASP.NET
+
+Según la información pública consultada, los backups de base de datos se
+realizan por defecto cada dos días. También se publica un complemento
+CustomBackup para programar respaldos adicionales; los archivos generados
+mediante ese mecanismo se conservan durante una semana. El panel permite crear
+y descargar respaldos manuales, y existe un procedimiento para restaurar
+archivos de respaldo MSSQL.
+
+Estas características no permiten afirmar por sí solas que SmarterASP.NET satisface RNF-10. La política publicada no coincide directamente con la
+estrategia del proyecto de respaldo automático diario y conservación de los
+últimos 30 respaldos diarios. Una futura contratación requeriría comprobar y
+configurar un mecanismo adicional que permita cumplir exactamente esa política.
+
+#### Alternativa B: Microsoft Azure
+
+Microsoft Azure puede implementar conceptualmente la arquitectura mediante
+Azure App Service para la aplicación web y el backend, y Azure SQL Database
+para la persistencia.
+
+No se establece un precio mensual fijo para la solución completa. Los precios
+de Azure son variables según la región, el nivel o SKU, los recursos, la
+modalidad de compra y el consumo o la configuración adoptada.
+
+La documentación oficial contempla App Service F1 gratuito para
+experimentación y aprendizaje. Esta modalidad no está soportada para cargas productivas y no dispone de SLA, por lo que no debe presentarse como una
+solución productiva permanente.
+
+#### Backups de Azure SQL
+
+Azure SQL realiza backups automáticos y permite recuperación a un punto en el
+tiempo. En los niveles compatibles, la retención de corto plazo puede
+configurarse entre 1 y 35 días. Azure SQL Basic está limitado a una retención
+de 1 a 7 días.
+
+Por ello, una futura implementación que deba satisfacer los 30 días definidos
+por RNF-10 tendría que seleccionar una configuración compatible con al menos
+30 días de retención. La disponibilidad de backups automáticos o de
+recuperación a un punto en el tiempo no implica, sin configuración y prueba del entorno adoptado, que RNF-10 esté verificado.
+
+#### Respaldo manual y portabilidad en Azure SQL
+
+Azure SQL permite exportar el esquema y los datos mediante un archivo BACPAC,
+que puede almacenarse y posteriormente importarse. Esta capacidad puede servir
+como mecanismo de respaldo manual o de portabilidad sujeto al procedimiento
+autorizado del entorno.
+
+Un archivo BACPAC no sustituye por sí solo toda la estrategia de backup
+automático, retención, supervisión y restauración controlada definida en la
+sección 25.
+
+#### Tabla comparativa
+
+| Alternativa     | Compatibilidad tecnológica | Costo de referencia                | Backup/restauración                                                       | Consideración para RNF-10                                                         |
+| --------------- | -------------------------- | ---------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| SmarterASP.NET  | .NET 8 + SQL Server        | Desde US$2.95/mes                  | Backup y restore disponibles                                              | Requiere verificar y complementar la política para cumplir 30 respaldos diarios.  |
+| Microsoft Azure | App Service + Azure SQL    | Costo variable según configuración | Backup automático, recuperación a punto en el tiempo y exportación BACPAC | Requiere seleccionar una configuración que permita al menos 30 días de retención. |
+
+La tabla es una referencia técnica y económica fechada; no establece una
+selección, preferencia ni contratación.
+
+#### Criterios para una decisión futura
+
+Cuando el Comité decida implementar el sistema, deberá evaluar como mínimo:
+
+- costo sostenible;
+- compatibilidad con .NET 8;
+- SQL Server;
+- HTTPS;
+- administración de secretos;
+- facilidad de mantenimiento;
+- mecanismo de migraciones;
+- política de backup;
+- retención mínima requerida;
+- restauración;
+- acceso administrativo;
+- soporte técnico.
+
+La decisión deberá basarse en las condiciones vigentes en ese momento y en la
+verificación actualizada de las capacidades, precios, restricciones y políticas
+de cada alternativa.
+
+#### Fuentes de referencia consultadas
+
+Las siguientes referencias se registran como fuentes textuales de la
+información utilizada en esta sección, consultadas en octubre de 2026. No se
+inventan fechas de publicación cuando la fuente no las proporciona:
+
+- Microsoft Azure — App Service pricing.
+- Microsoft Learn — Automatic, geo-redundant backups, Azure SQL Database.
+- Microsoft Learn — Export a database to a BACPAC file.
+- Microsoft Azure — Azure SQL Database pricing.
+- SmarterASP.NET — ASP.NET Core Hosting.
+- SmarterASP.NET — ASP.NET Hosting Plans.
+- SmarterASP.NET — How can I create a custom database backup?
+- SmarterASP.NET — How to create and download a database backup.
+- SmarterASP.NET — How can I restore MSSQL database to your server?
