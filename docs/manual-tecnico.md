@@ -969,3 +969,151 @@ Los procedimientos definitivos de hosting, despliegue productivo, respaldos,
 restauración, proveedor cloud, dominio, URL pública y certificados del proveedor
 quedan pendientes de la definición del entorno de alojamiento de la Fase 6.
 RNF-10 y RNF-11 continúan pendientes.
+
+### 24. Condiciones para una futura implementación operativa
+
+La versión desarrollada puede prepararse para alojamiento web. La contratación
+y configuración de la infraestructura permanente no forman parte de la
+ejecución actual de la Fase 6. La decisión de adopción operativa y la
+selección del entorno corresponderán posteriormente al Comité de Agua Potable.
+
+La documentación del sistema conserva las condiciones técnicas necesarias para
+realizar esa implementación en una etapa posterior, sin afirmar que exista
+actualmente un entorno productivo. El futuro entorno deberá soportar, como
+mínimo, los siguientes componentes y capacidades:
+
+- frontend web desarrollado con React y Vite;
+- backend desarrollado con ASP.NET Core sobre .NET 8;
+- SQL Server compatible con el proveedor utilizado por Entity Framework Core;
+- acceso mediante HTTPS;
+- configuración segura y externa de secretos;
+- almacenamiento y persistencia de la base de datos;
+- ejecución controlada de las migraciones de Entity Framework Core;
+- mecanismos de respaldo y recuperación.
+
+#### Arquitectura de referencia
+
+La arquitectura futura puede representarse conceptualmente de la siguiente
+manera:
+
+```text
+Navegador
+  |
+   HTTPS
+  |
+Frontend web
+  |
+   /api o URL configurada
+  |
+ASP.NET Core 8
+  |
+Entity Framework Core
+  |
+SQL Server
+```
+
+Esta arquitectura es conceptual. Puede implementarse mediante distintas
+infraestructuras compatibles, siempre que conserven la conectividad, la
+seguridad, la persistencia y los procedimientos de operación requeridos.
+
+#### Requisitos del alojamiento
+
+| Requisito                                    | Finalidad                                                                        | Condición de aceptación futura                                                                                         |
+| -------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Ejecución compatible con ASP.NET Core/.NET 8 | Ejecutar la API con el framework objetivo del sistema.                           | La API inicia y atiende solicitudes en un entorno compatible con .NET 8.                                               |
+| Alojamiento del frontend web                 | Servir la interfaz React/Vite a los usuarios previstos.                          | El frontend puede cargarse mediante navegador desde el entorno adoptado.                                               |
+| SQL Server compatible                        | Proporcionar la persistencia relacional requerida por la aplicación.             | El backend se conecta a una base SQL Server compatible y puede operar con ella.                                        |
+| HTTPS                                        | Proteger el tránsito entre navegador, frontend y backend.                        | El acceso previsto se realiza mediante HTTPS con una configuración válida.                                             |
+| Configuración externa de secretos            | Evitar que claves, contraseñas y cadenas sensibles formen parte del repositorio. | Los secretos se suministran mediante la configuración segura del entorno y no se exponen en el código ni en registros. |
+| Conectividad frontend/backend                | Permitir que la interfaz invoque la API mediante `/api` o una URL configurada.   | Las solicitudes principales del frontend alcanzan el backend sin depender de la configuración local de Vite.           |
+| Persistencia de datos                        | Conservar la información administrativa entre ejecuciones.                       | Los datos permanecen disponibles después de reinicios controlados del sistema.                                         |
+| Aplicación controlada de migraciones         | Mantener el esquema de base de datos coordinado con la versión entregada.        | Las migraciones se revisan, autorizan y aplican mediante un procedimiento definido para el entorno.                    |
+| Mecanismos de backup                         | Conservar puntos de recuperación de la información.                              | El entorno permite ejecutar y supervisar la estrategia de respaldos definida en la sección 25.                         |
+| Mecanismo de restauración                    | Recuperar la información mediante un procedimiento controlado.                   | El entorno permite restaurar un punto autorizado y verificar posteriormente la integridad y las funciones esenciales.  |
+| Acceso administrativo controlado             | Limitar la operación de infraestructura y datos a personal autorizado.           | Las funciones administrativas del entorno se asignan, protegen y revisan conforme a una autorización definida.         |
+
+No se establecen cantidades mínimas de CPU, memoria, almacenamiento ni una
+disponibilidad permanente, porque el proyecto no ha realizado pruebas de
+capacidad que permitan justificarlas y este documento no define un SLA.
+
+#### Condición futura de RNF-11
+
+RNF-11 se considerará comprobado operativamente únicamente cuando se cumplan
+todas las condiciones siguientes sobre el entorno adoptado:
+
+1. exista un entorno de alojamiento seleccionado y configurado;
+2. frontend, backend y persistencia estén disponibles;
+3. pueda accederse mediante navegador desde los dispositivos previstos;
+4. se comprueben las funciones principales desde ese entorno.
+
+Hasta entonces, el estado de RNF-11 debe describirse como: "Arquitectura preparada; comprobación operativa condicionada a la futura implementación."
+
+### 25. Requisitos de respaldo y recuperación
+
+El proyecto define como estrategia para la futura infraestructura un respaldo
+automático diario, la conservación de los últimos 30 respaldos diarios, la
+posibilidad de generar un respaldo manual autorizado y una restauración
+controlada. Estos elementos son requisitos para seleccionar y configurar el
+entorno futuro; no son mecanismos actualmente verificados en producción. Este
+manual no afirma que se hayan ejecutado respaldos ni restauraciones.
+
+#### Respaldo automático
+
+El entorno futuro deberá permitir:
+
+- ejecutar respaldos automáticamente cada día;
+- conservar los últimos 30 respaldos diarios;
+- supervisar y verificar que cada respaldo se haya realizado;
+- proteger el almacenamiento de respaldo frente a accesos no autorizados o
+  exposición pública.
+
+La tecnología concreta para cumplir estas condiciones deberá definirse al
+seleccionar y configurar la infraestructura. Este manual no impone un producto
+ni un mecanismo específico.
+
+#### Respaldo manual
+
+Deberá existir un procedimiento autorizado para producir un punto de respaldo
+adicional antes de operaciones sensibles, actualizaciones o tareas de
+mantenimiento, cuando corresponda. El procedimiento deberá identificar quién
+puede solicitar o ejecutar la operación, cómo se verifica su resultado y dónde
+se conserva el punto generado. El repositorio no implementa un botón de backup
+dentro de la aplicación, por lo que esta capacidad no se atribuye al frontend
+ni al backend actuales.
+
+#### Restauración controlada
+
+La restauración futura deberá seguir un procedimiento conceptual seguro:
+
+1. identificar el respaldo o punto de recuperación que se utilizará;
+2. verificar que la restauración esté autorizada;
+3. evitar sobrescribir información válida sin un control previo;
+4. restaurar mediante el mecanismo previsto por la infraestructura;
+5. verificar la integridad de los datos y el acceso al sistema;
+6. comprobar las funciones esenciales de la aplicación;
+7. documentar la intervención, su resultado y cualquier incidencia.
+
+Los pasos concretos dependerán de la infraestructura finalmente seleccionada.
+No se incluyen comandos destructivos ni instrucciones específicas de un
+proveedor inexistente.
+
+#### Prueba futura de RNF-10
+
+RNF-10 solo podrá considerarse comprobado operativamente sobre la
+infraestructura adoptada cuando se cumplan todas las condiciones siguientes:
+
+1. se evidencie la ejecución del respaldo automático;
+2. se compruebe la política de retención de los últimos 30 respaldos diarios;
+3. se genere un respaldo manual autorizado;
+4. se realice una prueba controlada de restauración;
+5. se compruebe el funcionamiento posterior del sistema.
+
+Hasta entonces, el estado de RNF-10 debe describirse como: "Estrategia definida; comprobación operativa condicionada a la futura implementación."
+
+#### Seguridad de los respaldos
+
+Los respaldos pueden contener información administrativa sensible. Por ello,
+deben restringirse al personal autorizado y no deben almacenarse públicamente.
+Las credenciales asociadas a su ejecución, supervisión o restauración deben
+mantenerse fuera del repositorio y suministrarse mediante mecanismos seguros de
+configuración del entorno.
