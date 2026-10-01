@@ -487,3 +487,168 @@ consulta pública utiliza el responsable vigente para incorporar sus obligacione
 personales pendientes, de modo que no arrastra las obligaciones personales de
 responsables históricos. La operación también registra la acción, la entidad,
 el usuario administrativo y los valores anterior y nuevo en `Auditoria`.
+
+### 13. Cuotas y obligaciones
+
+#### Cuotas
+
+`Cuota` representa una definición administrativa de un cobro. Contiene nombre,
+descripción opcional, monto, periodicidad, fecha inicial y final de vigencia y
+estado de registro. Las periodicidades implementadas son `Anual` y `Mensual`.
+El servicio valida el monto con precisión de dos decimales y la coherencia del
+rango de vigencia.
+
+Una cuota puede utilizarse para generar una obligación para un suministro. En
+ese proceso se conserva la referencia a `Cuota`, se copia el concepto y monto
+de la cuota y se establece un período compatible con su periodicidad: `yyyy`
+para una cuota anual o `yyyy-MM` para una cuota mensual. El sistema impide
+duplicar una obligación no anulada para la misma cuota, suministro y período.
+Una modificación posterior de la cuota no reescribe el monto histórico de una
+obligación ya generada. El código no establece un monto permanente como Q30.
+
+La cuota es la configuración que puede reutilizarse para generar cobros; la
+obligación es el registro económico concreto, con su propio monto, período,
+fechas, origen y estado.
+
+#### Obligaciones
+
+`Obligacion` representa un importe exigible a un único titular. La persistencia
+aplica una restricción XOR: cada obligación pertenece a un suministro o a una
+persona, pero no a ambos ni a ninguno. Por ello, una obligación de cuota se
+relaciona con un suministro y una obligación personal se relaciona directamente
+con una persona.
+
+El origen distingue `CuotaOrdinaria`, `Jornada` y `Administrativa`. El registro
+conserva concepto, monto, período opcional, fecha de generación, vencimiento
+opcional y estado. Los estados implementados son `Pendiente`, `Pagada` y
+`Anulada`. La consulta proyecta además `EsMorosa` cuando una obligación
+pendiente tiene vencimiento y la fecha actual ya lo superó.
+
+La generación administrativa personal recibe varias personas activas, valida
+que no existan identificadores repetidos y crea una obligación independiente
+para cada persona seleccionada. Cada registro queda con `PersonaId`, sin
+`SuministroId` ni `CuotaId`, y se audita individualmente; no se crea una
+obligación compartida entre personas.
+
+Las consultas de obligaciones exponen un listado ordenado por fecha de
+generación e identificador, y una consulta individual. Las operaciones de
+generación validan referencias, período, montos y duplicidad; la anulación
+requiere motivo y solo cambia una obligación pendiente a `Anulada`, conservando
+el registro y su auditoría. Una obligación pagada o anulada no puede anularse
+nuevamente.
+
+### 14. Jornadas comunitarias
+
+`Jornada` representa una actividad comunitaria dirigida a personas. Contiene
+nombre, descripción, fecha, horario opcional, ubicación, monto opcional de
+incumplimiento y estado. Sus estados son `Planificada`, `Cerrada` y
+`Cancelada`; solo una jornada planificada puede editarse, cancelarse, modificar
+participantes o cerrarse.
+
+`ParticipacionJornada` relaciona una jornada con una persona y registra el
+resultado administrativo y una observación opcional. Los resultados observables
+son `Pendiente`, `Participacion`, `Ausencia` y `AusenciaJustificada`. Una
+restricción única evita más de una participación para la misma jornada y
+persona. La jornada no se relaciona aquí con el suministro.
+
+Para cerrar una jornada deben existir participantes y no puede quedar ninguno
+con resultado `Pendiente`. La ausencia no genera automáticamente una deuda en
+cualquier circunstancia. Al cerrar, solo las participaciones con resultado
+`Ausencia` generan obligaciones cuando la jornada tiene configurado un
+`MontoIncumplimiento` positivo. La participación y la ausencia justificada no
+generan obligación, y una ausencia sin monto configurado tampoco la genera.
+
+La obligación derivada se asigna a la persona de la participación, tiene origen
+`Jornada`, queda pendiente, no tiene suministro, cuota, período ni vencimiento,
+y utiliza como concepto la jornada correspondiente. `ObligacionJornada`
+relaciona esa obligación con la participación que la originó. Sus índices
+únicos garantizan como máximo una obligación por participación y una
+participación por obligación; antes del cierre el servicio también evita volver
+a enlazar participaciones que ya tengan obligación.
+
+### 15. Pagos y comprobantes
+
+#### Registro y aplicación de pagos
+
+Un `Pago` registra una transacción con monto, fecha, concepto, usuario
+administrativo y estado. Sus obligaciones se relacionan mediante
+`AplicacionPago`, que conecta cada pago con cada `Obligacion` aplicada:
+
+```text
+Pago -> AplicacionPago -> Obligacion
+```
+
+El registro de pago exige que las obligaciones existan, que sus identificadores
+no estén repetidos, que todas estén en estado `Pendiente` y que pertenezcan al
+mismo titular. El titular puede ser una persona o un suministro, pero no se
+mezclan obligaciones de distintos titulares. El monto recibido debe coincidir
+exactamente con la suma de los montos de las obligaciones seleccionadas.
+
+En consecuencia, no se admiten pagos parciales, sobrepagos ni saldos a favor.
+Un mismo pago sí puede aplicar varias obligaciones completas del mismo titular.
+En una operación válida se crea el pago, se crea una aplicación por obligación
+y cada obligación cambia a `Pagada` dentro de la operación transaccional.
+La combinación `PagoId` y `ObligacionId` es única para evitar duplicar una
+misma aplicación dentro del mismo pago.
+
+#### Comprobantes
+
+El servicio proporciona los datos del comprobante mediante
+`GetComprobanteAsync`; no crea un archivo PDF ni persiste un documento separado.
+El número se deriva del identificador del pago con el formato `PAG-######`.
+El `ComprobantePagoDto` contiene, de forma general, número, identificador,
+fecha, concepto, total, estado, usuario administrativo, titular y la lista de
+obligaciones aplicadas con su origen, concepto, período y monto.
+
+La API expone estos datos mediante el endpoint de comprobante y el frontend los
+utiliza para la representación digital del comprobante. La existencia de este
+DTO no implica un formato de archivo adicional.
+
+#### Anulación y conservación histórica
+
+La anulación solo procede para un pago registrado cuyas aplicaciones existan y
+cuyas obligaciones continúen pagadas. Cambia el estado del pago a `Anulado`,
+devuelve las obligaciones asociadas a `Pendiente` y conserva las filas de
+`Pago` y `AplicacionPago`; por tanto, la relación histórica permanece. La
+misma obligación puede pagarse nuevamente después de anular el pago anterior,
+sin eliminar la aplicación histórica.
+
+La operación registra una auditoría con el estado y las obligaciones afectadas.
+Un pago ya anulado no puede anularse otra vez. Las reglas de validación también
+impiden registrar pagos sobre obligaciones inexistentes, no pendientes o con
+montos inconsistentes.
+
+### 16. Gestión financiera
+
+La gestión financiera combina pagos registrados y egresos administrativos. No
+existe una entidad persistente independiente llamada `Ingreso`: los ingresos
+financieros se derivan de los registros de `Pago` cuyo estado es `Registrado`.
+Los pagos anulados quedan fuera de los ingresos, movimientos y totales.
+
+`Egreso` es la entidad persistente para gastos administrativos del Comité. Guarda
+concepto, monto, fecha civil, usuario administrativo y estado. Los estados son
+`Registrado` y `Anulado`; el monto debe ser positivo y el concepto no puede
+superar la longitud configurada. Un egreso registrado puede editarse o anularse.
+La anulación conserva la fila, cambia su estado y excluye el egreso de los
+movimientos y totales; un egreso anulado no puede editarse ni anularse de nuevo.
+
+El servicio financiero proporciona consultas de ingresos, egresos, movimientos
+y resumen, con filtros de fecha y, cuando corresponde, estado o tipo de
+movimiento. El resumen calcula:
+
+```text
+balance = pagos registrados - egresos registrados
+```
+
+Los pagos se filtran usando el día operativo de Guatemala y los egresos usan su
+fecha civil. Los movimientos distinguen los tipos `Ingreso` y `Egreso`, y el
+resumen devuelve ingresos totales, egresos totales y balance.
+
+El registro, edición y anulación de egresos generan auditoría con el usuario,
+la acción, la entidad y los valores anterior y nuevo cuando corresponde. Los
+pagos registrados y anulados también conservan la trazabilidad mediante las
+auditorías del servicio de pagos.
+
+Los controladores financieros se protegen con los permisos declarados para
+finanzas, entre ellos `FINANZAS.VER` y `FINANZAS.GESTIONAR`; estos permisos
+controlan el acceso a consultas y operaciones administrativas respectivamente.
