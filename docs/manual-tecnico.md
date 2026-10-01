@@ -186,3 +186,131 @@ de respaldos de producción.
 
 Los requisitos RNF-10 y RNF-11 no se presentan como verificados en este
 documento.
+
+### 8. Configuración del backend
+
+El backend utiliza el sistema de configuración de ASP.NET Core, que combina
+los archivos de configuración y las variables del entorno según el entorno de
+ejecución. La configuración efectiva debe proporcionar los valores requeridos
+sin incorporar secretos al repositorio.
+
+La entrada `ConnectionStrings:DefaultConnection` es obligatoria. El método
+`AddInfrastructure` obtiene esta cadena mediante la configuración y, si no
+existe o está vacía, detiene la inicialización mediante una excepción. Cuando
+está disponible, se utiliza para configurar `PanyebarDbContext` con el
+proveedor de SQL Server.
+
+La sección `Jwt` contiene los parámetros de los tokens de acceso:
+
+- `Jwt:Issuer`: emisor esperado del token;
+- `Jwt:Audience`: audiencia esperada;
+- `Jwt:ExpirationMinutes`: duración de los tokens emitidos, en minutos;
+- `Jwt:Key`: clave requerida para firmar y validar los tokens.
+
+La clave JWT no se documenta ni se almacena en este manual. Los secretos deben
+suministrarse mediante configuración segura del entorno, un almacén de secretos
+o el mecanismo equivalente disponible para la ejecución; no deben incorporarse
+al repositorio.
+
+`PublicWeb:BaseUrl` identifica el origen web permitido para el frontend. En el
+entorno `Development`, `Program.cs` utiliza este valor para configurar el
+origen permitido por la política CORS `FrontendDevelopment`. Esta estrategia
+de CORS es observable para desarrollo y no implica que sea la misma que se
+utilice en producción.
+
+Los valores locales observables en los archivos de desarrollo y perfiles de
+ejecución son el frontend en `http://localhost:5173`, el backend HTTP en
+`http://localhost:5166`, el backend HTTPS en `https://localhost:7164` y una
+base local de SQL Server Express denominada `PanyebarDb`. Estos valores no
+representan una configuración de producción.
+
+Swagger y Swagger UI se habilitan únicamente cuando
+`app.Environment.IsDevelopment()` es verdadero. El pipeline también utiliza
+`UseHttpsRedirection()` para redirigir las solicitudes HTTP según la
+configuración de ejecución.
+
+| Parámetro                             | Propósito                                                  | Requerido                                    | Tratamiento recomendado                                                                         |
+| ------------------------------------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ConnectionStrings:DefaultConnection` | Cadena usada por el contexto para conectarse a SQL Server. | Sí                                           | Suministrarla mediante configuración segura del entorno; no registrar valores sensibles.        |
+| `Jwt:Issuer`                          | Identificar el emisor válido de los tokens.                | Sí                                           | Mantenerla consistente entre emisión y validación.                                              |
+| `Jwt:Audience`                        | Identificar la audiencia válida de los tokens.             | Sí                                           | Mantenerla consistente entre emisión y validación.                                              |
+| `Jwt:ExpirationMinutes`               | Definir la duración de los tokens emitidos.                | Configurado actualmente en `60`              | Ajustarla según la política de seguridad del entorno.                                           |
+| `Jwt:Key`                             | Firmar y validar tokens JWT.                               | Sí                                           | Protegerla como secreto externo al repositorio y no exponerla en registros.                     |
+| `PublicWeb:BaseUrl`                   | Definir el origen permitido por CORS en `Development`.     | Sí en `Development`                          | Configurar el origen local o autorizado del entorno; revisar la estrategia para producción.     |
+| `ASPNETCORE_ENVIRONMENT`              | Seleccionar el entorno de ejecución de ASP.NET Core.       | Para activar el comportamiento `Development` | Definirlo explícitamente según el entorno; no usar `Development` como configuración productiva. |
+
+### 9. Base de datos y persistencia
+
+La persistencia utiliza Entity Framework Core 8.0.0 con el proveedor de SQL
+Server. El contexto principal es `PanyebarDbContext`, ubicado en
+`backend/src/Panyebar.Infrastructure/Persistence/PanyebarDbContext.cs`.
+
+Sus `DbSet` se agrupan funcionalmente de la siguiente manera:
+
+- **Personas y suministros:** `Personas`, `Sectores`, `Suministros` y
+  `PersonaSuministros`.
+- **Cuotas y obligaciones:** `Cuotas`, `Obligaciones`.
+- **Jornadas:** `Jornadas`, `ParticipacionesJornada` y
+  `ObligacionesJornada`.
+- **Pagos:** `Pagos` y `AplicacionesPago`.
+- **Finanzas:** `Egresos`.
+- **Seguridad:** `UsuariosAdministrativos`, `Roles`, `Permisos`,
+  `UsuarioRoles` y `RolPermisos`.
+- **Administración del Comité:** `AdministracionesComite`, `Cargos` e
+  `IntegrantesAdministracion`.
+- **Auditoría:** `Auditorias`.
+- **Abastecimiento y procesos:** `ProgramacionesAbastecimiento`,
+  `ProcesosSuministro` y `SolicitudesNuevoServicio`.
+
+En `OnModelCreating`, el contexto define la secuencia `SuministroNisSequence`
+en el esquema `dbo`, con valor inicial `1` e incremento de `1`. La secuencia
+aporta el correlativo numérico; no constituye por sí sola el formato completo
+del NIS. La composición del identificador se realiza en `SuministroNisGenerator`
+y `NisFormatter`, donde el valor se presenta con el formato `PAN-######`
+dentro del rango implementado.
+
+El mismo método aplica las configuraciones del ensamblado de Infrastructure
+mediante `ApplyConfigurationsFromAssembly` y ejecuta `ConfigureUtcDateTimes()`.
+Las clases de configuración se encuentran en
+`backend/src/Panyebar.Infrastructure/Persistence/Configurations/` y definen
+el mapeo de entidades, relaciones, restricciones e índices de persistencia sin
+concentrar esas reglas en el contexto.
+
+### 10. Migraciones de Entity Framework Core
+
+Las migraciones de Entity Framework Core se encuentran en
+`backend/src/Panyebar.Infrastructure/Persistence/Migrations/`. Las migraciones
+actuales, ordenadas cronológicamente por su identificador, son:
+
+| Migración                                           | Finalidad inferible por el nombre                  |
+| --------------------------------------------------- | -------------------------------------------------- |
+| `20260827025307_InitialCreate`                      | Creación inicial del modelo de datos.              |
+| `20260903230736_ConfigureSectorAdministration`      | Configuración de la administración de sectores.    |
+| `20260904000930_ConfigurePersonAdministration`      | Configuración de la administración de personas.    |
+| `20260905014010_ConfigureSupplyIdentity`            | Configuración de la identidad de los suministros.  |
+| `20260905015808_ConfigureSupplyAdministration`      | Configuración de la administración de suministros. |
+| `20260908015939_ConfigureSupplyProcesses`           | Configuración de los procesos de suministro.       |
+| `20260908153046_ConfigureFeesAndObligations`        | Configuración de cuotas y obligaciones.            |
+| `20260911003707_ConfigureCommunityWorkDays`         | Configuración de jornadas de trabajo comunitario.  |
+| `20260912004909_ConfigurePayments`                  | Configuración de pagos.                            |
+| `20260917033536_ConfigureFinancialManagement`       | Configuración de la gestión financiera.            |
+| `20260917044659_AllowHistoricalPaymentApplications` | Habilitación de aplicaciones históricas de pagos.  |
+| `20260929025905_AddSectorToPersonas`                | Incorporación del sector a las personas.           |
+
+`Program.cs` no evidencia llamadas a `Database.Migrate()`,
+`Database.MigrateAsync()` ni `EnsureCreated()`. Por tanto, las migraciones no
+se presentan como aplicadas automáticamente al iniciar la API. Su aplicación
+debe formar parte de un procedimiento controlado de preparación o actualización
+de la base de datos; el procedimiento productivo definitivo queda pendiente de
+definición y no se establece en este bloque.
+
+No existe evidencia de un seeding general mediante `HasData` en el código
+productivo actual. Algunas migraciones históricas sí contienen operaciones SQL
+idempotentes para incorporar permisos u otros elementos específicos y una de
+ellas contempla compatibilidad con el usuario existente `demo.admin`. Este
+usuario se documenta únicamente como referencia de QA o demostración y no como
+cuenta administrativa definitiva de producción.
+
+La base de desarrollo no debe asumirse como una copia completa del entorno
+final. Los datos ficticios de prueba y cualquier cuenta usada para demostración
+no deben presentarse como datos productivos.
