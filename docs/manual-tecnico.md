@@ -314,3 +314,176 @@ cuenta administrativa definitiva de producción.
 La base de desarrollo no debe asumirse como una copia completa del entorno
 final. Los datos ficticios de prueba y cualquier cuenta usada para demostración
 no deben presentarse como datos productivos.
+
+### 11. Seguridad, autenticación y autorización
+
+#### Autenticación
+
+La API utiliza autenticación JWT Bearer. El flujo observable inicia en
+`POST /api/auth/login`: se busca un usuario administrativo activo por su nombre
+de usuario, se verifica la contraseña contra su hash y, si las credenciales son
+válidas, se emite un token de acceso. La respuesta también obtiene los permisos
+vigentes del usuario para que el frontend pueda representar las capacidades
+disponibles.
+
+El token emitido contiene la identidad administrativa en los claims de sujeto,
+identificador y nombre de usuario. Su emisión utiliza la configuración de
+`Jwt:Issuer`, `Jwt:Audience` y `Jwt:ExpirationMinutes`. La API valida el issuer,
+la audience, la vigencia y la clave de firma del token; además, el
+`ClockSkew` de la validación está configurado en cero. La clave `Jwt:Key` es un
+secreto de configuración y no se incluye en este documento.
+
+El endpoint `GET /api/auth/me` requiere autenticación y obtiene la identidad a
+partir de los claims del token para devolver la información del usuario y sus
+permisos actuales. La duración usada para emitir el token se configura mediante
+`Jwt:ExpirationMinutes`.
+
+#### Contraseñas
+
+Las contraseñas se procesan mediante `PasswordHasher<UsuarioAdministrativo>` a
+través de `PasswordHasherAdapter`. El sistema guarda el resultado en
+`UsuarioAdministrativo.PasswordHash` y verifica la contraseña proporcionada
+contra ese valor; la entidad no está diseñada para almacenar la contraseña en
+texto legible. La implementación acepta también el resultado de verificación
+que indica que el hash requiere un nuevo cálculo.
+
+El código impone una longitud mínima de ocho caracteres al crear usuarios
+administrativos o restablecer contraseñas. No se documenta aquí ningún valor de
+contraseña ni ninguna credencial concreta.
+
+#### Autorización basada en permisos
+
+La autorización se implementa mediante políticas dinámicas. Las políticas con
+el formato `Permission:<código>` son interpretadas por
+`PermissionPolicyProvider`, que crea un requisito `PermissionRequirement` y
+exige primero una identidad autenticada. `PermissionAuthorizationHandler`
+obtiene el identificador administrativo desde los claims y consulta
+`IUsuarioPermissionRepository`.
+
+La consulta de permisos comprueba que el usuario esté activo, recorre sus
+relaciones `UsuarioRol`, considera únicamente los roles activos, recorre sus
+relaciones `RolPermiso` y finalmente exige que el permiso encontrado esté
+activo y tenga el código solicitado. La autorización efectiva ocurre cuando
+esa consulta confirma el permiso.
+
+En los controladores se observan códigos con nomenclatura de módulo y acción,
+por ejemplo `PERSONAS.VER`, `SUMINISTROS.GESTIONAR` y
+`SEGURIDAD.AUDITORIA.VER`. Estos ejemplos proceden de los códigos declarados
+por la aplicación y no constituyen una lista exhaustiva en este manual.
+
+Autenticación, rol, permiso y autorización cumplen funciones distintas:
+
+- **Autenticación:** determina si las credenciales permiten reconocer a un
+  usuario administrativo y emitir un token.
+- **Rol:** agrupa una asignación administrativa reutilizable.
+- **Permiso:** representa una capacidad técnica identificada por un código.
+- **Autorización efectiva:** decide si una solicitud autenticada puede ejecutar
+  una operación, consultando el permiso requerido y el estado vigente del
+  usuario, sus roles y sus permisos.
+
+#### Usuarios, roles y permisos
+
+`UsuarioAdministrativo` contiene la identidad administrativa, su hash de
+contraseña y su estado. `UsuarioRol` relaciona usuarios con roles. `Rol`
+contiene el nombre, descripción y estado de una agrupación de autorización.
+`RolPermiso` relaciona cada rol con los permisos que puede conceder, mientras
+que `Permiso` contiene el código, nombre, descripción y estado de la capacidad
+técnica.
+
+La asignación efectiva es, por tanto, una relación indirecta:
+`UsuarioAdministrativo` → `UsuarioRol` → `Rol` → `RolPermiso` → `Permiso`.
+El código no establece aquí que un rol específico sea obligatorio para
+producción. Las cuentas usadas para QA o demostración no forman parte de una
+definición de credenciales productivas.
+
+#### Auditoría
+
+Las operaciones administrativas que incorporan auditoría crean registros en la
+entidad `Auditoria` con el usuario administrativo, la acción, la entidad y su
+identificador, la fecha y, cuando corresponde, los valores anterior y nuevo.
+El servicio de administración permite consultar estos registros con filtros por
+fechas, usuario, acción y entidad, con un límite controlado de resultados.
+
+El código muestra este mecanismo en operaciones administrativas y funcionales
+concretas, como cambios de responsable, procesos de suministro, gestión de
+usuarios, cuotas, pagos, finanzas y administración del Comité. No se afirma que
+absolutamente todas las operaciones del sistema generen un registro de
+auditoría.
+
+#### Buenas prácticas operativas
+
+Las siguientes son recomendaciones operativas y no afirmaciones de que todas
+ellas estén verificadas o automatizadas por la implementación actual:
+
+- mantener secretos y credenciales fuera del repositorio;
+- utilizar credenciales individuales y evitar compartir cuentas administrativas;
+- aplicar el principio de mínimo privilegio mediante permisos necesarios;
+- cambiar o revocar accesos cuando corresponda;
+- utilizar HTTPS en el entorno de entrega.
+
+### 12. Identificación de suministros mediante NIS y código QR
+
+#### NIS
+
+El NIS pertenece al suministro y se almacena en la propiedad `Suministro.Nis`.
+Al crear un suministro, `SuministroNisGenerator` solicita el siguiente valor
+de la secuencia persistente `dbo.SuministroNisSequence`. Después,
+`NisFormatter` convierte ese correlativo en el formato implementado
+`PAN-######`; por ejemplo, el primer valor puede representarse
+conceptualmente como `PAN-000001`.
+
+La secuencia numérica y el formateo son responsabilidades separadas. El
+modelo configura un índice único sobre `Nis`, por lo que no se admiten dos
+suministros con el mismo identificador almacenado. El NIS es una identidad del
+suministro, no de la persona responsable; el cambio de responsable no crea un
+nuevo NIS. Las operaciones de cambio de responsable conservan el suministro y
+no asignan nuevamente su NIS.
+
+#### Token técnico y código QR
+
+Cada suministro se asocia con `Suministro.CodigoQrToken`. El generador utiliza
+un valor aleatorio criptográfico de 32 bytes y lo representa como Base64 URL-safe
+sin el relleno final. El token se almacena asociado al suministro y tiene un
+índice único.
+
+Al solicitar el QR administrativo, el backend construye una URL absoluta con
+`PublicWeb:BaseUrl`, la ruta `/suministro/qr/{token}` y el token escapado. En el
+frontend, `qrcode.react` utiliza ese valor para el renderizado visual mediante
+`QRCodeSVG`. Por tanto, el token técnico, la URL de consulta y la representación
+visual son elementos relacionados pero distintos.
+
+El token no contiene directamente datos personales ni financieros y no funciona
+como contraseña. La consulta QR pública no sustituye la autenticación ni la
+autorización administrativa: existe una ruta pública específica para la
+consulta permitida y la consulta administrativa por token permanece protegida
+por el permiso de suministros.
+
+#### Consulta pública mediante QR
+
+La ruta `GET /api/suministros/public/qr/{token}` permite consultar el resumen
+público asociado con un token válido sin exigir autenticación. La respuesta
+implementada contiene el NIS, el sector, el estado del suministro, la cantidad
+de obligaciones pendientes y el total pendiente.
+
+El cálculo considera únicamente obligaciones con estado `Pendiente`: incluye
+las obligaciones propias del suministro y, cuando existe un responsable
+vigente, las obligaciones personales pendientes de esa persona. Por ello, las
+obligaciones pagadas o anuladas no se incluyen, ni se consideran las
+obligaciones personales de responsables históricos. La respuesta no expone
+directamente datos personales del responsable ni detalles individuales de las
+obligaciones.
+
+#### Cambio de responsable
+
+El cambio de responsable modifica la relación entre persona y suministro, no
+la identidad del suministro. Si existía una relación vigente, se registra su
+fecha de finalización y estado finalizado; después se crea una nueva relación
+vigente en `PersonaSuministro`. Un índice único filtrado garantiza como máximo
+un responsable vigente por suministro, mientras que las relaciones anteriores
+se conservan para el historial.
+
+El suministro conserva su NIS y su `CodigoQrToken` durante este cambio. La
+consulta pública utiliza el responsable vigente para incorporar sus obligaciones
+personales pendientes, de modo que no arrastra las obligaciones personales de
+responsables históricos. La operación también registra la acción, la entidad,
+el usuario administrativo y los valores anterior y nuevo en `Auditoria`.
