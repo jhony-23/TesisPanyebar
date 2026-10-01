@@ -801,3 +801,171 @@ requieren `ADMINISTRACION.GESTIONAR`; las consultas y el catálogo de cargos
 requieren `ADMINISTRACION.VER`. Estas operaciones registran auditoría con el
 usuario actor, la acción, la entidad y los valores anteriores y nuevos cuando
 corresponde.
+
+### 21. Compilación y ejecución
+
+#### Prerrequisitos
+
+Los prerrequisitos observables del repositorio son:
+
+- un SDK de .NET 8 compatible con `global.json`. El archivo solicita `8.0.424`
+  y permite el avance a un patch compatible mediante `latestPatch`;
+- Node.js y npm para restaurar y ejecutar el frontend. El repositorio no fija
+  una versión mínima de Node.js;
+- una instancia compatible de SQL Server;
+- una cadena `ConnectionStrings:DefaultConnection`, una configuración JWT
+  válida y `PublicWeb:BaseUrl` según el entorno de ejecución.
+
+El proyecto no tiene como framework objetivo .NET 10. La base de datos debe
+estar preparada mediante el procedimiento controlado de migraciones
+correspondiente antes de iniciar operaciones que requieran persistencia.
+
+#### Restauración y compilación del backend
+
+Desde la raíz del repositorio, la solución backend puede restaurarse y
+compilarse con:
+
+```text
+dotnet restore backend/Panyebar.sln
+dotnet build backend/Panyebar.sln
+```
+
+La solución contiene los proyectos `Panyebar.Api`, `Panyebar.Application`,
+`Panyebar.Domain` y `Panyebar.Infrastructure`. Estos comandos restauran las
+dependencias .NET y verifican que los proyectos compilen; no despliegan la API,
+no crean la base de datos y no aplican migraciones automáticamente.
+
+#### Pruebas automatizadas
+
+El proyecto de pruebas se encuentra en
+`backend/tests/Panyebar.Security.Tests/Panyebar.Security.Tests.csproj`. Puede
+ejecutarse desde la raíz con:
+
+```text
+dotnet test backend/tests/Panyebar.Security.Tests/Panyebar.Security.Tests.csproj
+```
+
+La suite vigente es el criterio operativo: debe finalizar correctamente. El
+baseline certificado de la Fase 5 registró históricamente `404/404`, pero esa
+cantidad no es un requisito permanente y puede cambiar cuando se incorporen
+pruebas legítimas.
+
+#### Frontend
+
+Como existe `frontend/package-lock.json`, la restauración reproducible
+preferente es:
+
+```text
+cd frontend
+npm ci
+```
+
+Los scripts declarados en `frontend/package.json` son:
+
+```text
+npm run dev
+npm run lint
+npm run build
+npm run preview
+```
+
+`npm run dev` inicia el servidor de desarrollo de Vite. `npm run lint` ejecuta
+Oxlint y `npm run build` genera el build del frontend mediante Vite. `npm run preview`
+sirve localmente el resultado construido para revisión; `vite preview` no es el
+servidor de producción definitivo.
+
+#### Ejecución local
+
+El orden general de preparación local es:
+
+1. disponer de SQL Server y de la base de datos preparada;
+2. proporcionar la configuración del backend, sin incluir secretos en el
+   repositorio;
+3. iniciar el backend ASP.NET Core;
+4. iniciar el frontend Vite.
+
+Los perfiles `Development` observables exponen el backend HTTP en
+`http://localhost:5166` y HTTPS en `https://localhost:7164`; el frontend local
+se configura habitualmente en `http://localhost:5173`. Vite utiliza un proxy de
+`/api` hacia `http://localhost:5166`. Estas URLs corresponden al entorno local,
+no a un entorno de entrega.
+
+#### Variables y secretos
+
+El backend obtiene configuración desde el sistema de configuración de ASP.NET
+Core. `appsettings.json` contiene parámetros no secretos; la configuración de
+desarrollo añade la conexión local y `PublicWeb:BaseUrl`. El proyecto API
+declara un `UserSecretsId`, por lo que User Secrets puede utilizarse durante el
+desarrollo para valores sensibles sin escribirlos en los archivos versionados.
+
+El frontend documenta sus variables en `frontend/.env.example`. Puede utilizar
+`VITE_API_BASE_URL` y, si no se define, usa `/api`; también puede definir
+`VITE_ALLOWED_HOST` para Vite. Las variables con prefijo `VITE_` pueden formar
+parte del bundle del cliente y no son un almacenamiento seguro de secretos. No
+deben contener claves JWT, contraseñas ni cadenas de conexión sensibles.
+
+### 22. Mantenimiento y actualización
+
+Las actualizaciones deben ejecutarse mediante un procedimiento controlado y
+adaptado al entorno que se defina para la entrega. Como secuencia general:
+
+1. respaldar la información antes de cambios que puedan afectar datos;
+2. identificar el commit o versión actualmente instalada;
+3. obtener o preparar la nueva versión;
+4. revisar cambios de configuración y variables requeridas;
+5. restaurar dependencias .NET y npm usando los archivos declarativos;
+6. revisar las migraciones nuevas y su impacto antes de aplicarlas;
+7. aplicar las migraciones mediante el procedimiento controlado que corresponda;
+8. compilar el backend;
+9. ejecutar la suite de pruebas vigente;
+10. ejecutar lint y build del frontend;
+11. desplegar la versión en el entorno definido;
+12. realizar una verificación funcional posterior;
+13. conservar una posibilidad de recuperación o rollback conforme a la
+    infraestructura finalmente seleccionada.
+
+Las migraciones existentes forman parte del historial de persistencia y no deben
+editarse arbitrariamente después de haber sido utilizadas. Los cambios futuros
+del modelo deben producir nuevas migraciones controladas, que se revisen antes
+de su aplicación. La API actual no ejecuta migraciones automáticamente al
+iniciar, por lo que la preparación o actualización de la base de datos debe
+coordinarse explícitamente.
+
+El rollback de la aplicación y la reversión de la base de datos son operaciones
+distintas. Recuperar una versión anterior del código no revierte por sí mismo
+los cambios de esquema ni los datos ya aplicados. El procedimiento de base de
+datos debe definirse y validarse según la infraestructura real; este manual no
+incluye comandos destructivos de rollback de producción.
+
+Las actualizaciones de paquetes NuGet y npm deben revisarse y probarse antes de
+incorporarse. No se recomienda actualizar dependencias de forma indiscriminada
+ni sin comprobar compatibilidad, compilación, pruebas y comportamiento del
+frontend.
+
+### 23. Diagnóstico y solución de problemas
+
+| Síntoma                                              | Posible causa                                                                                         | Verificación                                                                      | Acción recomendada                                                                                                 |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| El backend no inicia y menciona `DefaultConnection`. | Falta o está vacía `ConnectionStrings:DefaultConnection`.                                             | Revisar la configuración efectiva del entorno sin exponer su valor.               | Proporcionar la cadena mediante configuración segura y confirmar acceso a SQL Server.                              |
+| El backend no inicia por JWT.                        | Falta `Jwt`, `Issuer`, `Audience` o `Key`, o la sección no es válida.                                 | Revisar los nombres de configuración y los mensajes de inicialización.            | Completar la configuración segura; no poner la clave en código ni en el repositorio.                               |
+| Error de conexión a SQL Server.                      | SQL Server no está disponible, la base no existe o la conexión no es válida.                          | Confirmar que la instancia esté activa y revisar la configuración local.          | Preparar la base mediante el procedimiento controlado y corregir la configuración de conexión.                     |
+| El frontend no alcanza `/api`.                       | El backend no está iniciado o el proxy de Vite apunta al destino local esperado.                      | Revisar el proceso backend y el proxy de `vite.config.js`.                        | Iniciar ambos servicios y verificar la ruta `/api`; revisar `VITE_API_BASE_URL` si se configuró.                   |
+| Error CORS durante `Development`.                    | `PublicWeb:BaseUrl` no coincide con el origen del frontend.                                           | Comparar el origen del navegador con `PublicWeb:BaseUrl`.                         | Configurar el origen local correcto; no trasladar automáticamente esta estrategia a producción.                    |
+| Respuesta `401 Unauthorized`.                        | Falta el token Bearer o no supera la autenticación/validación JWT.                                    | Revisar el login, el encabezado `Authorization`, issuer, audience y vigencia.     | Autenticar nuevamente y revisar la configuración JWT sin exponer la clave.                                         |
+| Respuesta `403 Forbidden`.                           | La identidad está autenticada, pero no tiene el permiso requerido.                                    | Revisar el permiso de la política y las asignaciones activas del usuario.         | Asignar solo el permiso necesario mediante el flujo administrativo autorizado.                                     |
+| La API requiere una migración pendiente.             | La base no corresponde al modelo o no se aplicó una migración nueva.                                  | Comparar el historial de migraciones con el código y el modelo esperado.          | Revisar y aplicar la migración mediante el procedimiento controlado; no editar migraciones usadas arbitrariamente. |
+| Falla la compilación backend.                        | Error de código, SDK incompatible, dependencia restaurada incorrectamente o configuración de entorno. | Ejecutar `dotnet build backend/Panyebar.sln` y revisar el primer error relevante. | Corregir la causa reportada y volver a compilar; no ocultar el error desactivando validaciones.                    |
+| Falla lint o build frontend.                         | Error de sintaxis, lint, dependencia o configuración Vite.                                            | Ejecutar `npm run lint` y `npm run build` desde `frontend/`.                      | Corregir el diagnóstico y repetir ambos comandos antes de entregar el build.                                       |
+| El QR no encuentra el suministro.                    | Token inválido, inexistente o URL pública mal formada.                                                | Verificar el token permitido, `PublicWeb:BaseUrl` y la ruta pública de consulta.  | Corregir la configuración o consultar un token válido; no sustituir el token por credenciales.                     |
+| Swagger no aparece.                                  | La API no está ejecutándose en `Development`.                                                         | Revisar `ASPNETCORE_ENVIRONMENT` y la condición de `Program.cs`.                  | Usar Swagger solo en el entorno de desarrollo configurado; no asumir que está habilitado fuera de él.              |
+
+La configuración de logging observable establece niveles `Information` para la
+aplicación y `Warning` para `Microsoft.AspNetCore` en los archivos de
+configuración. El repositorio no evidencia una plataforma externa de monitoreo,
+un sistema de trazas centralizado ni archivos de log persistentes; por tanto,
+este manual no atribuye esas capacidades al sistema.
+
+Los procedimientos definitivos de hosting, despliegue productivo, respaldos,
+restauración, proveedor cloud, dominio, URL pública y certificados del proveedor
+quedan pendientes de la definición del entorno de alojamiento de la Fase 6.
+RNF-10 y RNF-11 continúan pendientes.
