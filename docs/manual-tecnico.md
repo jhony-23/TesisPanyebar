@@ -652,3 +652,152 @@ auditorías del servicio de pagos.
 Los controladores financieros se protegen con los permisos declarados para
 finanzas, entre ellos `FINANZAS.VER` y `FINANZAS.GESTIONAR`; estos permisos
 controlan el acceso a consultas y operaciones administrativas respectivamente.
+
+### 17. Dashboard y reportes
+
+#### Dashboard
+
+El dashboard se expone mediante `GET /api/dashboard/resumen` y requiere el
+permiso `DASHBOARD.VER`. Recibe año y mes, valida que formen un período mensual
+representable y devuelve un resumen para ese mes administrativo. El cálculo
+incluye ingresos totales derivados de pagos registrados, egresos totales de
+egresos registrados, balance, cantidad de pagos registrados, cantidad de
+obligaciones pendientes y monto de esas obligaciones pendientes.
+
+Los pagos se filtran por su fecha UTC convertida desde el inicio del día
+operativo de Guatemala. Los egresos se consultan con sus fechas civiles. Las
+obligaciones pertenecen al mes por `FechaGeneracion`, no por su fecha de
+vencimiento ni por el texto de su período. El balance del resumen es la
+diferencia entre ingresos y egresos del intervalo mensual.
+
+El frontend utiliza además la consulta de recaudación por sector para mostrar
+la distribución territorial de pagos. Esta consulta agrupa aplicaciones de
+pagos registrados cuyas obligaciones pertenecen a suministros, y suma el monto
+histórico de esas obligaciones por sector. Las aplicaciones históricas de pagos
+anulados se conservan, pero no se consideran recaudación.
+
+#### Reportes
+
+Los reportes se exponen bajo `GET /api/reportes` y requieren `REPORTES.VER`.
+Las consultas implementadas son:
+
+- **Pagos:** lista pagos dentro de un rango de fechas, incluyendo su estado,
+  monto, concepto, fecha y usuario administrativo. El reporte conserva tanto
+  registros como anulaciones; solo los registrados representan ingreso.
+- **Recaudación por sector:** agrupa por sector las aplicaciones de pagos
+  registrados asociadas con obligaciones de suministros y permite rango de
+  fechas.
+- **Obligaciones pendientes:** lista obligaciones pendientes, su titular según
+  corresponda, origen, concepto, monto, período, fechas y condición de mora.
+- **Participación en jornadas:** consulta participaciones de personas,
+  resultado, observación, jornada, estado y fecha de la jornada, con rango de
+  fechas civiles.
+
+Los rangos de fechas se validan para impedir que la fecha inicial sea posterior
+a la final. La implementación no evidencia exportación a Excel o PDF, envío por
+correo, gráficas adicionales ni analítica predictiva.
+
+### 18. Programación del abastecimiento
+
+`ProgramacionAbastecimiento` registra la planificación administrativa del
+abastecimiento para un `Sector`. Contiene fecha, hora inicial, hora final,
+estado y observación opcional. Los estados implementados son `Programado`,
+`Completado` y `Cancelado`.
+
+El servicio permite consultar una programación individual o listados filtrados
+por fecha inicial, fecha final y sector. Los resultados se ordenan por fecha,
+hora y nombre del sector. Para crear o actualizar una programación se valida
+que el sector exista y esté activo, que el intervalo horario sea válido y que la
+observación no supere la longitud permitida. No se admite solapamiento de
+intervalos programados para el mismo sector y fecha.
+
+También existe una operación de creación recurrente. La recurrencia puede ser
+semanal, mensual o anual, y se define mediante una cantidad de ocurrencias o
+una fecha final, pero no ambas. El servicio limita la generación a entre 2 y 52
+programaciones y verifica los solapamientos antes de persistir el conjunto.
+
+Una programación en estado `Programado` puede actualizarse, completarse o
+cancelarse. Las transiciones no ejecutan acciones sobre válvulas, sensores,
+telemetría, redes hidráulicas ni otros dispositivos: el módulo registra y
+consulta planificación administrativa por sector. Las operaciones de gestión
+registran auditoría y requieren `ABASTECIMIENTO.GESTIONAR`; las consultas
+requieren `ABASTECIMIENTO.VER`.
+
+### 19. Procesos administrativos del suministro
+
+#### Solicitud de nuevo servicio
+
+`SolicitudNuevoServicio` representa una solicitud administrativa presentada por
+una persona para un sector, con dirección de referencia, fecha de solicitud,
+observación opcional y estado. Sus estados son `Pendiente`, `Aprobada` y
+`Rechazada`. La creación valida que la persona y el sector estén activos y que
+la persona no tenga otra solicitud pendiente de nuevo servicio.
+
+Las solicitudes se consultan priorizando las pendientes. Resolver una solicitud
+solo es posible mientras permanece pendiente y requiere una observación de
+resolución válida cuando se proporciona. Al aprobarla, el servicio crea el
+suministro activo, genera su NIS y token QR, lo relaciona con el sector y crea
+la relación vigente entre el suministro y la persona solicitante. Al rechazarla
+no se crea un suministro. Por tanto, la solicitud no representa por sí sola un
+suministro creado automáticamente antes de su aprobación.
+
+La creación y resolución de solicitudes se auditan con el usuario
+administrativo que ejecuta la operación. La consulta requiere
+`SUMINISTROS.VER` y la creación, aprobación o rechazo requiere
+`SUMINISTROS.GESTIONAR`.
+
+#### Cancelación, reconexión e historial del suministro
+
+Los procesos operativos administrativos del suministro se representan mediante
+`ProcesoSuministro`, relacionado con un `Suministro` y con el usuario
+administrativo que ejecutó la acción. El tipo de proceso puede ser
+`Cancelacion` o `Reconexion`; cada registro conserva estado anterior, estado
+nuevo, fecha, motivo obligatorio y observación opcional.
+
+La cancelación solo se aplica a un suministro `Activo` y lo cambia a
+`Cancelado`. La reconexión solo se aplica a un suministro `Cancelado` y lo
+devuelve a `Activo`. El motivo tiene longitud validada y la operación registra
+el proceso histórico junto con una auditoría. El suministro no se elimina, por
+lo que conserva su registro, NIS, token QR y el historial consultable de
+procesos.
+
+Las consultas administrativas de procesos requieren `SUMINISTROS.VER`, y las
+transiciones de cancelación y reconexión requieren `SUMINISTROS.GESTIONAR`.
+Estas operaciones representan cambios administrativos de estado y no deben
+interpretarse como eliminación física del suministro ni como automatización
+del servicio hidráulico.
+
+### 20. Administración del Comité
+
+`AdministracionComite` representa un período de administración con nombre,
+fecha de inicio, fecha de finalización opcional y estado de registro. Una
+administración se considera activa cuando su estado es `Activo` y no tiene
+fecha de finalización.
+
+El servicio permite crear una administración, consultar el listado histórico,
+obtener una administración y finalizarla. La creación valida nombre, fecha y
+usuario actor, y no permite otra administración activa al mismo tiempo. La
+finalización exige una fecha no anterior al inicio, registra `FechaFin` y cambia
+el estado a `Inactivo`. Las administraciones anteriores se conservan y se
+devuelven en las consultas históricas.
+
+#### Integrantes y cargos
+
+`IntegranteAdministracion` relaciona una administración con una `Persona` y un
+`Cargo`. `Cargo` es un catálogo con nombre, descripción y estado, y el servicio
+expone los cargos activos para asignación. La asignación de un integrante exige
+que la administración esté activa y que la persona y el cargo estén activos.
+
+La asignación evita conservar simultáneamente conflictos de la misma persona o
+del mismo cargo dentro de una administración: cuando corresponde, reemplaza
+las asignaciones relacionadas y registra la nueva combinación persona-cargo.
+Los integrantes se presentan con el nombre de la persona y el nombre del
+cargo. El modelo no relaciona `IntegranteAdministracion` con
+`UsuarioAdministrativo`; ser integrante del Comité no equivale a poseer una
+cuenta de acceso al sistema.
+
+La creación de administraciones, la asignación de integrantes y la finalización
+requieren `ADMINISTRACION.GESTIONAR`; las consultas y el catálogo de cargos
+requieren `ADMINISTRACION.VER`. Estas operaciones registran auditoría con el
+usuario actor, la acción, la entidad y los valores anteriores y nuevos cuando
+corresponde.
