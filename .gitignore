@@ -70,3 +70,5 @@ Thumbs.db
 
 *.bak
 *.backup
+# Artefactos locales de publicacion
+**/artifacts/
