@@ -1268,23 +1268,23 @@ por RNF-10 tendría que seleccionar una configuración compatible con al menos
 30 días de retención. La disponibilidad de backups automáticos o de
 recuperación a un punto en el tiempo no implica, sin configuración y prueba del entorno adoptado, que RNF-10 esté verificado.
 
-#### Respaldo manual y portabilidad en Azure SQL
+#### Portabilidad y archivado mediante BACPAC en Azure SQL
 
 Azure SQL permite exportar el esquema y los datos mediante un archivo BACPAC,
-que puede almacenarse y posteriormente importarse. Esta capacidad puede servir
-como mecanismo de respaldo manual o de portabilidad sujeto al procedimiento
-autorizado del entorno.
+que puede almacenarse y posteriormente importarse para fines de archivado o
+portabilidad entre entornos compatibles. Microsoft indica que los archivos
+BACPAC no están destinados a utilizarse como mecanismo de backup y restore.
 
-Un archivo BACPAC no sustituye por sí solo toda la estrategia de backup
-automático, retención, supervisión y restauración controlada definida en la
-sección 25.
+Por ello, un archivo BACPAC no sustituye la estrategia de backup automático,
+retención, supervisión, respaldo manual autorizado y restauración controlada
+definida en la sección 25.
 
 #### Tabla comparativa
 
 | Alternativa     | Compatibilidad tecnológica | Costo de referencia                | Backup/restauración                                                       | Consideración para RNF-10                                                         |
 | --------------- | -------------------------- | ---------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | SmarterASP.NET  | .NET 8 + SQL Server        | Desde US$2.95/mes                  | Backup y restore disponibles                                              | Requiere verificar y complementar la política para cumplir 30 respaldos diarios.  |
-| Microsoft Azure | App Service + Azure SQL    | Costo variable según configuración | Backup automático, recuperación a punto en el tiempo y exportación BACPAC | Requiere seleccionar una configuración que permita al menos 30 días de retención. |
+| Microsoft Azure | App Service + Azure SQL    | Costo variable según configuración | Backup automático y recuperación a punto en el tiempo | Requiere seleccionar una configuración que permita al menos 30 días de retención; BACPAC se considera para archivado o portabilidad, no como backup. |
 
 La tabla es una referencia técnica y económica fechada; no establece una
 selección, preferencia ni contratación.
