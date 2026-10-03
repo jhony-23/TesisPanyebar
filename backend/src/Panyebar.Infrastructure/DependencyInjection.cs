@@ -38,6 +38,7 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString));
 
         services.AddScoped<IPasswordHashService, PasswordHasherAdapter>();
+        services.AddScoped<IInitialAdministratorProvisioner, InitialAdministratorProvisioner>();
         services.AddScoped<IUsuarioAdministrativoAuthenticationRepository, UsuarioAdministrativoAuthenticationRepository>();
         services.AddScoped<IUsuarioAdministrativoAuthenticationService, UsuarioAdministrativoAuthenticationService>();
         services.AddScoped<IUsuarioPermissionRepository, UsuarioPermissionRepository>();
@@ -53,7 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IFinanzaService, FinanzaService>();
         services.AddScoped<IDashboardReportesService, DashboardReportesService>();
         services.AddScoped<IAbastecimientoService, AbastecimientoService>();
-            services.AddScoped<IAdministracionComiteService, AdministracionComiteService>();
+        services.AddScoped<IAdministracionComiteService, AdministracionComiteService>();
         services.AddScoped<ISuministroNisGenerator, SuministroNisGenerator>();
         services.AddSingleton<ISuministroQrTokenGenerator, SuministroQrTokenGenerator>();
 

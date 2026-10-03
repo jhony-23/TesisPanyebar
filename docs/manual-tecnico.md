@@ -182,7 +182,10 @@ este manual.
 El entorno de entrega queda pendiente de definición y configuración durante la
 Fase 6. En este bloque no se selecciona un proveedor, no se define una URL
 pública, no se declara implementada la producción y no se afirma la existencia
-de respaldos de producción.
+de respaldos de producción. Si frontend y API se sirven desde orígenes
+distintos, `PublicWeb:BaseUrl` debe contener exactamente el origen autorizado,
+con esquema `http` o `https` y sin ruta. Si se usa el mismo origen, debe
+dejarse vacío y el frontend debe utilizar `/api`.
 
 Los requisitos RNF-10 y RNF-11 no se presentan como verificados en este
 documento.
@@ -215,8 +218,10 @@ al repositorio.
 `PublicWeb:BaseUrl` identifica el origen web permitido para el frontend. En el
 entorno `Development`, `Program.cs` utiliza este valor para configurar el
 origen permitido por la política CORS `FrontendDevelopment`. Esta estrategia
-de CORS es observable para desarrollo y no implica que sea la misma que se
-utilice en producción.
+de CORS se conserva para desarrollo. Fuera de `Development`, un valor válido
+habilita únicamente `ConfiguredFrontend` para ese origen; un valor vacío
+mantiene el escenario same-origin sin habilitar CORS. No se utiliza
+`AllowAnyOrigin`.
 
 Los valores locales observables en los archivos de desarrollo y perfiles de
 ejecución son el frontend en `http://localhost:5173`, el backend HTTP en
@@ -224,20 +229,39 @@ ejecución son el frontend en `http://localhost:5173`, el backend HTTP en
 base local de SQL Server Express denominada `PanyebarDb`. Estos valores no
 representan una configuración de producción.
 
+La equivalencia para variables de entorno de ASP.NET Core es:
+
+```text
+ConnectionStrings__DefaultConnection=<cadena SQL Server del entorno>
+Jwt__Issuer=<emisor no secreto>
+Jwt__Audience=<audiencia no secreta>
+Jwt__ExpirationMinutes=<duración en minutos>
+Jwt__Key=<clave secreta JWT>
+PublicWeb__BaseUrl=<origen HTTP/HTTPS autorizado o vacío para same-origin>
+ASPNETCORE_ENVIRONMENT=<entorno distinto de Development para operación>
+```
+
+`ConnectionStrings__DefaultConnection` y `Jwt__Key` son secretos. Las demás
+variables no son secretos por sí mismas, aunque deben configurarse de acuerdo
+con el entorno. Nunca deben incluirse valores reales sensibles en el
+repositorio. `VITE_API_BASE_URL` se incorpora al bundle del frontend y nunca
+debe contener secretos; puede omitirse para usar `/api` en el escenario
+same-origin.
+
 Swagger y Swagger UI se habilitan únicamente cuando
 `app.Environment.IsDevelopment()` es verdadero. El pipeline también utiliza
 `UseHttpsRedirection()` para redirigir las solicitudes HTTP según la
 configuración de ejecución.
 
-| Parámetro                             | Propósito                                                  | Requerido                                    | Tratamiento recomendado                                                                         |
-| ------------------------------------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `ConnectionStrings:DefaultConnection` | Cadena usada por el contexto para conectarse a SQL Server. | Sí                                           | Suministrarla mediante configuración segura del entorno; no registrar valores sensibles.        |
-| `Jwt:Issuer`                          | Identificar el emisor válido de los tokens.                | Sí                                           | Mantenerla consistente entre emisión y validación.                                              |
-| `Jwt:Audience`                        | Identificar la audiencia válida de los tokens.             | Sí                                           | Mantenerla consistente entre emisión y validación.                                              |
-| `Jwt:ExpirationMinutes`               | Definir la duración de los tokens emitidos.                | Configurado actualmente en `60`              | Ajustarla según la política de seguridad del entorno.                                           |
-| `Jwt:Key`                             | Firmar y validar tokens JWT.                               | Sí                                           | Protegerla como secreto externo al repositorio y no exponerla en registros.                     |
-| `PublicWeb:BaseUrl`                   | Definir el origen permitido por CORS en `Development`.     | Sí en `Development`                          | Configurar el origen local o autorizado del entorno; revisar la estrategia para producción.     |
-| `ASPNETCORE_ENVIRONMENT`              | Seleccionar el entorno de ejecución de ASP.NET Core.       | Para activar el comportamiento `Development` | Definirlo explícitamente según el entorno; no usar `Development` como configuración productiva. |
+| Parámetro                             | Propósito                                                      | Requerido                                    | Tratamiento recomendado                                                                         |
+| ------------------------------------- | -------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ConnectionStrings:DefaultConnection` | Cadena usada por el contexto para conectarse a SQL Server.     | Sí                                           | Suministrarla mediante configuración segura del entorno; no registrar valores sensibles.        |
+| `Jwt:Issuer`                          | Identificar el emisor válido de los tokens.                    | Sí                                           | Mantenerla consistente entre emisión y validación.                                              |
+| `Jwt:Audience`                        | Identificar la audiencia válida de los tokens.                 | Sí                                           | Mantenerla consistente entre emisión y validación.                                              |
+| `Jwt:ExpirationMinutes`               | Definir la duración de los tokens emitidos.                    | Configurado actualmente en `60`              | Ajustarla según la política de seguridad del entorno.                                           |
+| `Jwt:Key`                             | Firmar y validar tokens JWT.                                   | Sí                                           | Protegerla como secreto externo al repositorio y no exponerla en registros.                     |
+| `PublicWeb:BaseUrl`                   | Definir el único origen permitido por CORS cuando se requiere. | Sí en `Development`; opcional en same-origin | Usar un origen HTTP/HTTPS sin ruta; dejar vacío si frontend y API comparten origen.             |
+| `ASPNETCORE_ENVIRONMENT`              | Seleccionar el entorno de ejecución de ASP.NET Core.           | Para activar el comportamiento `Development` | Definirlo explícitamente según el entorno; no usar `Development` como configuración productiva. |
 
 ### 9. Base de datos y persistencia
 
@@ -296,6 +320,7 @@ actuales, ordenadas cronológicamente por su identificador, son:
 | `20260917033536_ConfigureFinancialManagement`       | Configuración de la gestión financiera.            |
 | `20260917044659_AllowHistoricalPaymentApplications` | Habilitación de aplicaciones históricas de pagos.  |
 | `20260929025905_AddSectorToPersonas`                | Incorporación del sector a las personas.           |
+| `20261002000100_SeedCommitteeCargoCatalog`          | Catálogo inicial de cargos del Comité.             |
 
 `Program.cs` no evidencia llamadas a `Database.Migrate()`,
 `Database.MigrateAsync()` ni `EnsureCreated()`. Por tanto, las migraciones no
@@ -314,6 +339,50 @@ cuenta administrativa definitiva de producción.
 La base de desarrollo no debe asumirse como una copia completa del entorno
 final. Los datos ficticios de prueba y cualquier cuenta usada para demostración
 no deben presentarse como datos productivos.
+
+#### Preparación controlada de una base nueva
+
+Para una futura implementación, una tercera persona autorizada debe crear o
+proporcionar una base SQL Server vacía y conceder al proceso de migración los
+permisos necesarios. La cadena no debe escribirse en el repositorio; puede
+suministrarse mediante User Secrets durante una preparación local controlada o
+mediante `ConnectionStrings__DefaultConnection` en la configuración segura del
+entorno. Desde la raíz del repositorio, el procedimiento es:
+
+```text
+dotnet ef migrations list --project backend/src/Panyebar.Infrastructure/Panyebar.Infrastructure.csproj --startup-project backend/src/Panyebar.Api/Panyebar.Api.csproj
+dotnet ef database update --project backend/src/Panyebar.Infrastructure/Panyebar.Infrastructure.csproj --startup-project backend/src/Panyebar.Api/Panyebar.Api.csproj
+dotnet ef migrations list --project backend/src/Panyebar.Infrastructure/Panyebar.Infrastructure.csproj --startup-project backend/src/Panyebar.Api/Panyebar.Api.csproj
+```
+
+La segunda consulta debe confirmar que no quedan migraciones pendientes. Las
+migraciones históricas no deben editarse ni reescribirse. La API debe iniciarse
+solo después de completar esta preparación.
+
+#### Aprovisionamiento del primer administrador
+
+El repositorio incluye un comando explícito, no un endpoint público ni un seed
+automático de cada inicio. Después de aplicar las migraciones y con la API
+detenida, se define temporalmente el nombre de usuario mediante una variable y
+se ejecuta:
+
+```text
+$env:PANYEBAR_BOOTSTRAP_ADMIN_USERNAME = "usuario-administrativo-real"
+dotnet run --project backend/src/Panyebar.Api/Panyebar.Api.csproj -- --bootstrap-admin
+Remove-Item Env:PANYEBAR_BOOTSTRAP_ADMIN_USERNAME
+```
+
+El comando solicita la contraseña sin mostrarla ni registrarla. La contraseña
+se convierte mediante el hasher existente y solo se almacena el hash. El
+bootstrap crea un rol técnico inicial con los permisos de consulta y gestión
+necesarios: `SEGURIDAD.USUARIOS.VER`, `SEGURIDAD.USUARIOS.GESTIONAR`,
+`SEGURIDAD.ROLES.VER`, `SEGURIDAD.ROLES.GESTIONAR`,
+`SEGURIDAD.PERMISOS.VER` y `SEGURIDAD.PERMISOS.ASIGNAR`. Rechaza la ejecución si ya existe cualquier
+usuario administrativo, por lo que una segunda ejecución no duplica ni
+sobrescribe la administración inicial. Luego, el administrador puede continuar
+con la administración normal de usuarios, roles y permisos desde la aplicación.
+No debe usarse `demo.admin` como cuenta productiva ni versionarse una contraseña,
+un hash productivo o cualquier secreto.
 
 ### 11. Seguridad, autenticación y autorización
 
@@ -827,7 +896,9 @@ compilarse con:
 
 ```text
 dotnet restore backend/Panyebar.sln
-dotnet build backend/Panyebar.sln
+dotnet build backend/Panyebar.sln -c Release
+dotnet test backend/tests/Panyebar.Security.Tests/Panyebar.Security.Tests.csproj -c Release
+dotnet publish backend/src/Panyebar.Api/Panyebar.Api.csproj -c Release
 ```
 
 La solución contiene los proyectos `Panyebar.Api`, `Panyebar.Application`,
@@ -842,7 +913,7 @@ El proyecto de pruebas se encuentra en
 ejecutarse desde la raíz con:
 
 ```text
-dotnet test backend/tests/Panyebar.Security.Tests/Panyebar.Security.Tests.csproj
+dotnet test backend/tests/Panyebar.Security.Tests/Panyebar.Security.Tests.csproj -c Release
 ```
 
 La suite vigente es el criterio operativo: debe finalizar correctamente. El
@@ -858,6 +929,8 @@ preferente es:
 ```text
 cd frontend
 npm ci
+npm run lint
+npm run build
 ```
 
 Los scripts declarados en `frontend/package.json` son:
@@ -870,9 +943,12 @@ npm run preview
 ```
 
 `npm run dev` inicia el servidor de desarrollo de Vite. `npm run lint` ejecuta
-Oxlint y `npm run build` genera el build del frontend mediante Vite. `npm run preview`
-sirve localmente el resultado construido para revisión; `vite preview` no es el
-servidor de producción definitivo.
+Oxlint y `npm run build` genera el build del frontend mediante Vite. `npm run
+preview` sirve localmente el resultado construido para revisión; `vite preview`
+no es el servidor de producción definitivo. `frontend/dist` y la salida
+generada por `dotnet publish` son artefactos de publicación y no deben
+versionarse. El hosting futuro debe servir el frontend, ejecutar ASP.NET Core 8
+y configurar HTTPS en la infraestructura adoptada.
 
 #### Ejecución local
 
