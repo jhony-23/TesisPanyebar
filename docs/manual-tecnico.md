@@ -4,16 +4,21 @@
 
 ### 1. Identificación del documento
 
-Este documento corresponde a la documentación técnica de la versión preparada
-para la Fase 6 del trabajo de graduación.
+Este Manual Técnico documenta la versión desarrollada y preparada durante la
+Fase 6 del trabajo de graduación para una futura implementación operativa.
 
 El baseline funcional certificado es:
 
 `fe5dbf9` — `feat(qr): include current responsible obligations`
 
-Este commit representa el cierre certificado de la Fase 5. La documentación de
-la Fase 6 se desarrolla posteriormente y conserva ese commit como punto de
-referencia, sin alterar la historia del repositorio.
+Este commit representa el checkpoint funcional certificado de cierre de la
+Fase 5. Como referencia del estado técnico y documental auditado durante el
+cierre de la Fase 6 se conserva también:
+
+`7fda3ad` — `docs(phase6): clarify Azure BACPAC usage`
+
+Esta referencia de Fase 6 no sustituye el baseline funcional certificado de la
+Fase 5 ni altera la historia del repositorio.
 
 ### 2. Propósito del manual
 
@@ -179,13 +184,14 @@ este manual.
 
 #### Entorno de entrega
 
-El entorno de entrega queda pendiente de definición y configuración durante la
-Fase 6. En este bloque no se selecciona un proveedor, no se define una URL
-pública, no se declara implementada la producción y no se afirma la existencia
-de respaldos de producción. Si frontend y API se sirven desde orígenes
-distintos, `PublicWeb:BaseUrl` debe contener exactamente el origen autorizado,
-con esquema `http` o `https` y sin ruta. Si se usa el mismo origen, debe
-dejarse vacío y el frontend debe utilizar `/api`.
+La infraestructura operativa definitiva no se contrata ni configura durante
+esta fase. Su selección y configuración quedan condicionadas a una futura
+decisión de adopción operativa del Comité y de la comunidad. Actualmente no
+existe una URL pública productiva, no se afirma que exista producción y no se
+afirma la existencia de respaldos productivos. Si frontend y API se sirven
+desde orígenes distintos, `PublicWeb:BaseUrl` debe contener exactamente el
+origen autorizado, con esquema `http` o `https` y sin ruta. Si se usa el mismo
+origen, debe dejarse vacío y el frontend debe utilizar `/api`.
 
 Los requisitos RNF-10 y RNF-11 no se presentan como verificados en este
 documento.
@@ -326,8 +332,10 @@ actuales, ordenadas cronológicamente por su identificador, son:
 `Database.MigrateAsync()` ni `EnsureCreated()`. Por tanto, las migraciones no
 se presentan como aplicadas automáticamente al iniciar la API. Su aplicación
 debe formar parte de un procedimiento controlado de preparación o actualización
-de la base de datos; el procedimiento productivo definitivo queda pendiente de
-definición y no se establece en este bloque.
+de la base de datos. El procedimiento definitivo deberá adaptarse a la
+infraestructura que se seleccione cuando se autorice la futura implementación
+operativa; este Manual Técnico ya documenta las condiciones y pasos generales
+necesarios.
 
 No existe evidencia de un seeding general mediante `HasData` en el código
 productivo actual. Algunas migraciones históricas sí contienen operaciones SQL
@@ -916,10 +924,13 @@ ejecutarse desde la raíz con:
 dotnet test backend/tests/Panyebar.Security.Tests/Panyebar.Security.Tests.csproj -c Release
 ```
 
-La suite vigente es el criterio operativo: debe finalizar correctamente. El
-baseline certificado de la Fase 5 registró históricamente `404/404`, pero esa
-cantidad no es un requisito permanente y puede cambiar cuando se incorporen
-pruebas legítimas.
+La suite vigente es el criterio operativo: debe finalizar correctamente. En la
+Fase 5, el baseline certificado registró históricamente `404/404`. Durante la
+preparación técnica final de la Fase 6 se registraron `417/417` pruebas
+superadas, con `0` fallidas y `0` omitidas. El aumento corresponde, entre otras
+pruebas legítimas incorporadas posteriormente, a la cobertura de CORS y del
+aprovisionamiento controlado del primer administrador. Estas cifras no
+constituyen un requisito fijo permanente.
 
 #### Frontend
 
@@ -1041,10 +1052,15 @@ configuración. El repositorio no evidencia una plataforma externa de monitoreo,
 un sistema de trazas centralizado ni archivos de log persistentes; por tanto,
 este manual no atribuye esas capacidades al sistema.
 
-Los procedimientos definitivos de hosting, despliegue productivo, respaldos,
-restauración, proveedor cloud, dominio, URL pública y certificados del proveedor
-quedan pendientes de la definición del entorno de alojamiento de la Fase 6.
-RNF-10 y RNF-11 continúan pendientes.
+Los procedimientos específicos de hosting, despliegue productivo, respaldos,
+restauración, dominio, URL pública y certificados dependerán de la
+infraestructura seleccionada cuando el Comité y la comunidad autoricen la
+implementación operativa. Las condiciones técnicas generales ya están
+documentadas en las secciones siguientes.
+
+RNF-10: "Estrategia definida; comprobación operativa condicionada a la futura implementación."
+
+RNF-11: "Arquitectura preparada; comprobación operativa condicionada a la futura implementación."
 
 ### 24. Condiciones para una futura implementación operativa
 
@@ -1281,9 +1297,9 @@ definida en la sección 25.
 
 #### Tabla comparativa
 
-| Alternativa     | Compatibilidad tecnológica | Costo de referencia                | Backup/restauración                                                       | Consideración para RNF-10                                                         |
-| --------------- | -------------------------- | ---------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| SmarterASP.NET  | .NET 8 + SQL Server        | Desde US$2.95/mes                  | Backup y restore disponibles                                              | Requiere verificar y complementar la política para cumplir 30 respaldos diarios.  |
+| Alternativa     | Compatibilidad tecnológica | Costo de referencia                | Backup/restauración                                   | Consideración para RNF-10                                                                                                                            |
+| --------------- | -------------------------- | ---------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SmarterASP.NET  | .NET 8 + SQL Server        | Desde US$2.95/mes                  | Backup y restore disponibles                          | Requiere verificar y complementar la política para cumplir 30 respaldos diarios.                                                                     |
 | Microsoft Azure | App Service + Azure SQL    | Costo variable según configuración | Backup automático y recuperación a punto en el tiempo | Requiere seleccionar una configuración que permita al menos 30 días de retención; BACPAC se considera para archivado o portabilidad, no como backup. |
 
 La tabla es una referencia técnica y económica fechada; no establece una
